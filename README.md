@@ -1,7 +1,7 @@
 # Scientific Data Analysis in R
 
 ## Overview
-This repository documents selected scientific data-analysis workflows developed during a four-year part-time position as a Student Research Assistant at [University / Scientific Core Facility].
+This repository documents selected scientific data-analysis workflows developed during a four-year part-time position as a Student Research Assistant at Charité Universitätsmedizin, Berlin.
 
 The work involved analysing behavioural measurements from mouse and rat behavioural assays addressing neuroscience research questions across approximately 12 research projects. Different analyses were performed according to the requirements of each project, resulting in around 20 analysis workflows overall, of which approximately 14–15 were developed as new analysis templates.
 
