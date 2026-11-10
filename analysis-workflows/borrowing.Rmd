@@ -1,0 +1,508 @@
+---
+title: "Borrowing Test Analysis"
+author: ""
+output:
+  word_document:
+    toc: true
+  pdf_document:
+    fig_caption: true
+    number_sections: true
+    toc: true
+    df_print: kable
+  html_document:
+    df_print: kable
+    toc: true
+    toc_float:
+      collapsed: false
+    number_sections: true
+    theme: cosmo
+mainfont: palatino
+geometry: left=2cm,right=3cm,top=2cm,bottom=4cm
+header-includes: \usepackage{fancyhdr}
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automatically created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Borrowing Test Analysis 
+developed by: Narendra Solanki (NS) 
+last update: 26.08.2024
+
+This script takes the preprocessed data from the PREPROCESSOR.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : Output from PREPROCESS.R (.xlsx file)
+                   lookup file (.xlsx)
+             
+CURRENT SETTINGS : ONLY TESTED FOR THIS PROJECT!!!
+                   3 groups
+                   > This means that the script is currently able to analyze a 
+                   project consisting of the settings above. For all other 
+                   settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the preprocessed data and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 Pellets removed
+                    3.2 Pellets borrowing performance
+
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+-->
+
+## Grip Strength Test Analysis
+
+-- **Illustration:**  
+Boxplots and individual scores  
+
+```{r gs_data_loading}
+
+rm(list = ls())
+
+#--------------------------- 1. Manual Entries -----------------------------#
+# 1.1 INPUT FILES
+file_path <- "~/AOCF-Behavioral Tests/Burrowing test/validation/group data/"
+
+raw_data_file1 <- "170816_group1_Burrowing_test.xlsx"
+raw_data_file2 <- "170816_group2_Burrowing_test.xlsx"
+raw_data_file3 <- "170816_group3_Burrowing_test.xlsx"
+
+#---------------------------2. LOAD DATA-----------------------------#
+# Load data
+raw_data1 <- read_excel(paste(file_path,raw_data_file1,sep = ""))
+raw_data1$gr <- "gr1"
+raw_data2 <- read_excel(paste(file_path,raw_data_file2,sep = ""))
+raw_data2$gr <- "gr2"
+raw_data3 <- read_excel(paste(file_path,raw_data_file3,sep = ""))
+raw_data3$gr <- "gr3"
+
+# Factor the genotype/group/sex variable 
+data <- rbind(raw_data1,raw_data2,raw_data3) %>%
+  rename(pellets = "# of pellets in tube",
+         a_two_hrs = "# of pellets outside (2hr)",  
+         b_overnight = "# of pellets outside (overnight)") %>%
+  mutate(gender = as.factor(sex),
+         gr = as.factor(gr),
+         perf_perc = (b_overnight/pellets)*100)          
+#         perf_perc = ((b_overnight - pellets)/pellets)*100) 
+
+df <- gather(data, key="time_points", value="values", 5:6) 
+
+list_of_exps <- factor(unique(df$time_points))
+list_of_genders <- unique(df$gender)
+list_of_groups <- unique(df$gr)
+
+```
+
+### Experimental conditions
+
+3 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `AOCF-Behavioral Tests\Burrowing test\validation\group data`  
+
+Preprocessed Data: 
+
+3 groups:  
+
+`170816_group1_Burrowing_test.xlsx`   
+`170816_group2_Burrowing_test.xlsx`   
+`170816_group3_Burrowing_test.xlsx`   
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `AOCF-Behavioral Tests\Burrowing test\validation\group data`    
+
+### Data Quality:  
+->All data can be used.  
+
+\newpage 
+
+### Results
+
+#### Pellets removed
+
+```{r pl_fig1, fig.width = 9, fig.height = 9}
+
+#---------------------------3. ANALYSIS-----------------------------#
+# 3.1 Pellets removed
+# 3.1.1 At 2 hrs point and overnight
+
+pl_pellets <- df %>%
+  ggplot(aes(x = gr, y = values, color = factor(time_points))) +
+  geom_boxplot(outlier.shape = NULL) +
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 0) +
+  #axis title
+  labs(x="", 
+       y = "Counts",  
+       title = "Number of pellets removed") +
+  #add a theme
+  theme_pubr() +
+  scale_colour_manual(values = c("blue", "red")) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_pellets  
+
+pl_pellets_s <- df %>%
+  ggplot(aes(x = gr, y = values, color = factor(time_points), fill = gender, label ="")) +
+  geom_boxplot(outlier.shape = NULL) +
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 0) +
+  #count n of each gender and add it to the plot 
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), vjust = 6, size=4, show.legend = FALSE) +  
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), vjust = 6, size=4) +
+  #axis title
+  labs(x="", 
+       y = "Counts",  
+       title = "Number of pellets removed") +
+  #add a theme
+  theme_pubr() +
+  scale_colour_manual(values = c("blue", "red")) +  
+  scale_fill_manual(values = c("white", "grey80")) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_pellets_s
+  
+#arrange the 2 plots created above into a grid with 1 rows and 2 column with automatic labelling (A,B)
+Fig1 <- ggarrange(pl_pellets, pl_pellets_s, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig1
+
+```
+
+__Figure 1.__ Comparison of number of pellets removed between groups (A) and between gender within group (B). 
+
+\newpage
+
+__Statistics for Figure 1 A.__
+
+```{r fig1a stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GROUPS)
+#create a tibble to collect all stats
+stats = tibble()
+
+for (i in 1:length(list_of_exps)) {
+  stat_data <- pl_pellets$data %>%
+    filter(time_points == list_of_exps[i])
+# perform Pairwise Wilcoxon Rank Sum Tests to compare within genotpye difference
+st = tidy(pairwise.wilcox.test(stat_data$values, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 1 A, pellets removed",
+          test = paste("between group for", list_of_exps[i]),  
+          sign=ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options="scale_down") 
+  kable_styling(latex_options = c("HOLD_position","scale_down"))  
+
+```
+
+__Statistics for Figure 1 B. (Between genders)__
+
+```{r fig1b1 stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GENDERS)
+#create a tibble to collect all stats
+stats = tibble()
+
+for (j in 1:length(list_of_exps)) {
+  data <- pl_pellets_s$data %>%
+    filter(time_points == list_of_exps[j])
+  for (i in 1:length(list_of_groups)) {
+    stat_data <- data %>%  
+      filter(gr == list_of_groups[i])
+    # perform Wilcoxon Rank Sum Tests to compare within group difference
+    st = tidy(wilcox.test(stat_data$values ~ stat_data$gender, exact = FALSE)) %>%
+      mutate(method = "Wilcoxon Sum",
+             variable = "Fig 1 B, pellets removed",
+             test = paste("between genders in", list_of_groups[i], "for", list_of_exps[j]),
+             sign=ifelse(p.value < 0.05, "*", ""))
+    #combine stats from every iteration of the loop
+    stats = bind_rows(stats, st)
+  }
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  knitr::kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options="scale_down")   
+  kableExtra::kable_styling(latex_options = c("scale_down", "HOLD_position"))
+
+```
+
+__Statistics for Figure 1 B. (Between groups)__
+
+```{r fig1b2 stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GROUPS)
+#create a tibble to collect all stats
+stats = tibble()
+
+for (j in 1:length(list_of_exps)) {
+  data <- pl_pellets_s$data %>%
+    filter(time_points == list_of_exps[j])
+  for (i in 1:length(list_of_genders)) {
+    stat_data <- data %>%  
+      filter(gender == list_of_genders[i])
+    # perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+    st = tidy(pairwise.wilcox.test(stat_data$values, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+      mutate(method = "Wilcoxon Sum",
+             variable = "Fig 1 B, pellets removed",
+             test = paste("between group in", list_of_exps[j], "for", list_of_genders[i]),
+             sign=ifelse(p.value < 0.05, "*", ""))
+    #combine stats from every iteration of the loop
+    stats = bind_rows(stats, st)
+  }
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options="scale_down")   
+#  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Pellets borrowing performance
+
+```{r pl_fig2, fig.width = 9, fig.height = 9}
+
+#---------------------------3. ANALYSIS-----------------------------#
+# 3.1 Pellets removed
+# 3.1.2 Pellets borrowing performance
+
+pl_perf <- df %>%
+  ggplot(aes(x = gr, y = perf_perc, color = gr)) +
+  geom_boxplot(outlier.shape = NULL) +
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 0) +
+  #axis title
+  labs(x="", 
+       y = "Performance (%)",  
+       title = "Pellets burrowing performance (%)") +
+  #add a theme
+  theme_pubr() +
+  scale_colour_manual(values = c("blue", "red", "green")) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_perf  
+
+pl_perf_s <- df %>%
+  ggplot(aes(x = gr, y = perf_perc, color = gr, fill = gender, label ="")) +
+  geom_boxplot(outlier.shape = NULL) +
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 0) +
+  #count n of each gender and add it to the plot 
+  
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), vjust = 2, size=4, show.legend = FALSE) +  
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), vjust = 2, size=4, show.legend = FALSE) +
+  #axis title
+  labs(x="", 
+       y = "Performance (%)",  
+       title = "Pellets burrowing performance (%)") +
+  #add a theme
+  theme_pubr() +
+  scale_colour_manual(values = c("blue", "red", "green")) +  
+  scale_fill_manual(values = c("white", "grey80")) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_perf_s
+  
+#arrange the 2 plots created above into a grid with 1 rows and 2 column with automatic labelling (A,B)
+Fig2 <- ggarrange(pl_perf, pl_perf_s, labels="AUTO", ncol=1, nrow=2, common.legend=FALSE, legend = "bottom")
+
+Fig2
+
+```
+
+__Figure 2.__ Comparison of pellets borrowing performance (%) between groups (A) and between gender within group (B). 
+
+\newpage
+
+__Statistics for Figure 2 A.__
+
+```{r fig2a stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GROUPS)
+#create a tibble to collect all stats
+stats = tibble()
+
+stat_data <- pl_perf$data
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare within genotpye difference
+st = tidy(pairwise.wilcox.test(stat_data$perf_perc, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 1 A, performance (%)",
+          test = paste("between groups"), 
+          sign=ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options="scale_down") 
+  kable_styling(latex_options = c("HOLD_position","scale_down"))  
+
+```
+
+__Statistics for Figure 2 B. (Between genders)__
+
+```{r fig2b1 stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GENDERS)
+#create a tibble to collect all stats
+stats = tibble()
+
+  for (i in 1:length(list_of_groups)) {
+    stat_data <- pl_perf_s$data %>%  
+      filter(gr == list_of_groups[i])
+    # perform Wilcoxon Rank Sum Tests to compare within group difference
+    st = tidy(wilcox.test(stat_data$perf_perc ~ stat_data$gender, exact = FALSE)) %>%
+      mutate(method = "Wilcoxon Sum",
+             variable = "Fig 2 B, performance (%)",
+             test = paste("between genders in", list_of_groups[i]),
+             sign=ifelse(p.value < 0.05, "*", ""))
+    #combine stats from every iteration of the loop
+    stats = bind_rows(stats, st)
+  }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options="scale_down") 
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B. (Between groups)__
+
+```{r fig2b2 stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GROUPS)
+#create a tibble to collect all stats
+stats = tibble()
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- pl_perf_s$data %>%
+    filter(gender == list_of_genders[i])
+  # perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(pairwise.wilcox.test(stat_data$perf_perc, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 2 B, performance (%)",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign=ifelse(p.value < 0.05, "*", "")) #%>%
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+ }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options="scale_down") 
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+******
+
+### Conclusion
+
+******

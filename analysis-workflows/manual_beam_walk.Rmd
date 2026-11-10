@@ -1,0 +1,565 @@
+---
+title: "Beam Walking Test"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# set default values for chunk options for the whole document 
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(grid)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(randomcoloR)
+library(gtable)
+library(ggrepel)
+library(tinytex)
+library(EnvStats)
+library(kableExtra)
+library(lubridate)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: Manual Beam Walk Test analysis
+author: Narendra Solanki (NS)
+last update: 12.06.2022
+
+This script takes the preprocessed data from the PREPROCESSOR_GENERAL_CW.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : Output from PREPROCESSOR_GENERAL_CW.R (.xlsx file)
+                   lookup file (.xlsx)
+             
+CURRENT SETTINGS : 2 Cohorts 
+                   2 strains
+                   ! Open Zones / Closed Zones  
+                   > the open/closed zones can be adjusted in '2. LOAD DATA' 
+                   
+                   > This means the script is currently able to analyze a project consisting of the settings above. For all other 
+                     settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the preprocessed data and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 Distance travelled in open and closed arms
+                    3.2 Percentage time spent in open and closed arms
+                    3.3 Number of entries into open/closed arms
+                    
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+
+NOTES             : - This script has been tested on the Project 'X'. 
+                      Variations in the zone naming may lead to errors
+                      > if this occurs there are two options:
+                          1. Rerun the preprocessor and use the zone names as in the above project
+                             ( N open, W closed, S open, E closed, center zone, S risk, N risk)
+                             
+                             OR
+                          2. Replace the column references in this script for the analysis (line 192pp)
+                          
+                    - strain (from the lookup file) is currently replaced by genotype (CD1 -> wt)
+                      if other strains than 'CD1' and 'tweet' are involved this will lead to an error
+
+
+ISSUES To FIX     : 
+-->
+
+\newpage
+
+
+```{r Manual_data_loading_BW}
+
+#here we clear the working directory again in case the script is used as a child
+rm(list = ls())
+#save the path to the working directory into the variable dir
+dir = getwd()
+
+#--------------------------- 1. Manual Entries -----------------------------#
+
+# Please enter here the following variables:
+
+# 1.1 INPUT FILES 
+
+file_path <- "~/6. Data from Behavioral Tests/"
+file_path_MR <- "~/6. Data from Behavioral Tests/"
+
+filename_cohort_1 <- "cohort1.xlsx"
+
+filename_cohort_2 <-  "cohort2.xlsx"
+
+filepath_to_lookup <- "~/6. Data from Behavioral Tests/lookup.xlsx"
+filepath_to_lookup_MR <- "~/6. Data from Behavioral Tests/lookup.xlsx"
+
+# 1.2 EXPERIMENTAL SETTINGS
+#2 cohorts of mice: 
+#Manual setting of individual per strain and cohort, not used anywhere in the script!
+Cohort_1 <- c(5,5) # Cohort 1 <- c(n mice of phenotype 1, n mice of phenotype 2)
+Cohort_2 <- c(6,6) # Cohort 2 <- c(n mice of phenotype 1, n mice of phenotype 2)
+
+# 1.3 PLOT
+#here we define the colors we going to use for the different strains for the plots 
+color_strain <- c("#0099CC", "#FF9900") 
+
+
+#---------------------------2. LOAD DATA-----------------------------#
+
+# Load lookup file with ID, cohort and genotype infos
+#evaluate read_excel function with given filepath
+lookup <- tryCatch(read_excel(filepath_to_lookup), # Process any error messages and try another filepath
+                   error= function(e) {
+  #print a small message with both filepaths
+  print(paste0('filepath: ', filepath_to_lookup, ' not found! Trying ', filepath_to_lookup_MR, ' instead.'))
+  lookup <- read_excel(filepath_to_lookup_MR)
+})
+
+#make a list of strains sorted alphabetically
+list_of_strains <- sort(unique(lookup$strain))
+#make a list of cohorts
+list_of_cohorts <- unique(lookup$cohort)
+
+
+# LOAD TEST
+
+# Load cohort 1 data
+#evaluate read_excel function with given filepath
+beam_walk_test_c1 <- tryCatch(read_excel(paste(file_path,filename_cohort_1, sep=""), sheet="beam_walk_test"  ),
+                   # Process any error messages and try another filepath
+                   error= function(e) {
+                   #print a small message with both filepaths
+  print(paste0('filepath: ', file_path, ' not found! Trying ', file_path_MR, ' instead.'))
+  beam_walk_test_c1 <- read_excel(paste(file_path_MR,filename_cohort_1, sep=""), sheet="beam_walk_test")
+})%>%
+  #add a column cohort containing ones in all rows and a column phase containing the word 'test' for all rows. Remove column 'date'.
+  add_column(cohort = 1,
+             phase = 'test') %>%
+  dplyr::select(-date)
+
+# Load cohort 2 data
+#evaluate read_excel function with given filepath
+beam_walk_test_c2 <- tryCatch(read_excel(paste(file_path,filename_cohort_2, sep=""), sheet="beam_walk_test" ),
+                   # Process any error messages and try another filepath
+                   error= function(e) {
+                   #print a small message with both filepaths
+  print(paste0('filepath: ', file_path, ' not found! Trying ', file_path_MR, ' instead.'))
+  beam_walk_test_c2 <- read_excel(paste(file_path_MR,filename_cohort_2, sep=""), sheet="beam_walk_test")
+})%>%
+  #add a colum cohort containing twos in all rows and a column phase containing the word 'test' for all rows. Remove column 'date'.
+  add_column(cohort=2,
+             phase = 'test')%>%
+  dplyr::select(-date)
+
+# Combine the two cohorts and add lookup
+beam_walk_test <- bind_rows(beam_walk_test_c1, beam_walk_test_c2) %>%
+  #rename animal in ID in order to join with lookup by ID and rename some columns into simpler names (replace spaces with underscores)
+  rename(ID = animal,
+         trial = `trial number`,
+         dia_beam = `diameter beam [mm]`,
+         lat_beam = `latency to traverse beam`,
+         slips = `hind foot slips`) %>%
+  left_join(lookup, by = c("cohort", "ID")) 
+
+
+# Comments
+#make a table with all rows containing comments
+beam_walk_test_comments <- beam_walk_test %>%
+  #select all rows which don't have na in column Comments
+  filter(!is.na(comments)) %>%
+  #add the listed columns for these rows
+  dplyr::select(cohort, ID,strain, trial, comments) %>%
+  #group the data
+  group_by(cohort, ID, trial)
+
+#LOAD TRAINING
+# Load cohort 1 data
+#evaluate read_excel function with given filepath
+beam_walk_train_c1 <- tryCatch(read_excel(paste(file_path,filename_cohort_1, sep=""), sheet="beam_walk_training"  ),
+                   # Process any error messages and try another filepath
+                   error= function(e) {
+                   #print a small message with both filepaths
+  print(paste0('filepath: ', file_path, ' not found! Trying ', file_path_MR, ' instead.'))
+  beam_walk_train_c1 <- read_excel(paste(file_path_MR,filename_cohort_1, sep=""), sheet="beam_walk_training")
+})%>%
+  add_column(cohort = 1,
+             #phase = 'test',
+             phase = 'train') %>%
+  dplyr::select(-date)
+
+# Load cohort 2 data
+#evaluate read_excel function with given filepath
+beam_walk_train_c2 <- tryCatch(read_excel(paste(file_path,filename_cohort_2, sep=""), sheet="beam_walk_training"  ),
+                   # Process any error messages and try another filepath
+                   error= function(e) {
+                   #print a small message with both filepaths
+  print(paste0('filepath: ', file_path, ' not found! Trying ', file_path_MR, ' instead.'))
+  beam_walk_train_c2 <- read_excel(paste(file_path_MR,filename_cohort_2, sep=""), sheet="beam_walk_training")
+}) %>%
+  add_column(cohort=2,
+             #phase = 'test',
+             phase = 'train')%>%
+  dplyr::select(-date)
+
+# Combine the two cohorts and add lookup
+beam_walk_train <- bind_rows(beam_walk_train_c1, beam_walk_train_c2) %>%
+  rename(ID = animal,
+         trial = `trial number`,
+         dia_beam = `diameter beam`,
+         lat_beam = `latency to traverse`) %>%
+  left_join(lookup, by = c("cohort", "ID")) 
+
+#set falling animals for beamwalk to max (1 min) and save them into a new dataframe 'beam_walk_test_keep'
+beam_walk_test_keep <- beam_walk_test %>%
+  #remove rows with NA values in column lat_beam
+  filter(!is.na(lat_beam)) %>%
+  #in column 'lat_beam' replace entries 'fall' and 'x' with "01:00" 
+  mutate(lat_beam = replace(lat_beam, lat_beam=='fall' | lat_beam == 'x', "01:00"),
+         
+         lat_beam_minsec = ms(lat_beam)) %>% 
+  # make a new column lat_beam_sec which adds up minutes and seconds from column lat_beam_minsec as seconds
+  mutate(lat_beam_sec = second(lat_beam_minsec) + (minute(lat_beam_minsec)*60))
+
+# overview of animals per cohort and strain
+
+ n_per_cohort = beam_walk_test_keep %>%
+   group_by(trial, dia_beam) %>% 
+   count(cohort) 
+ 
+ n_per_strain = beam_walk_test_keep %>% 
+   group_by(trial,dia_beam,cohort) %>% 
+   count(strain) 
+
+```
+## Beam Walking Test
+
+### Experimental conditions
+
+<!-- n cohorts of mice: -->
+
+<!-- * Cohort 1: $n$ =  (n genotype1 and m genotype2) -->
+<!-- * Cohort 2: $n$ =  (n genotype1 and m genotype2) -->
+
+2 cohorts of mice:
+
+* Cohort 1: $n$ =  `r n_per_cohort$n[1]` (`r n_per_strain$n[1]` `r n_per_strain$strain[1]` and `r n_per_strain$n[2]` `r n_per_strain$strain[2]`)
+* Cohort 2: $n$ =  `r n_per_cohort$n[2]` (`r n_per_strain$n[3]` `r n_per_strain$strain[3]` and `r n_per_strain$n[4]` `r n_per_strain$strain[4]`)
+
+
+### Results
+
+```{r, echo=F}
+make_stats <- function(DF, parameter, info_text) {
+  
+  #create a tibble called stats
+  stats = tibble()
+  
+  #rename the variable of interest (parameter) with param and save this dataframe into anew variable called stat_data
+  stat_data <- DF %>%
+  rename(param = parameter)
+
+  # Between strains
+  #perform the wilcox_test and tidy the output into a table/tibble
+  st = tidy(wilcox.test(param ~ strain, stat_data, paired = FALSE)) %>%
+    #create some additional columns
+    mutate(method = "Wilcoxon rank sum",
+         info = info_text,
+         test = "between strains for both cohorts",
+         sign=ifelse(p.value < 0.05, "*", ""))
+  #combine the statistics with all other statistics done within this function in stats 
+  stats = bind_rows(stats, st)
+
+  # Between cohorts
+  #st = tidy(wilcox.test(mean_lat ~ cohort, stat_data, paired = TRUE)) %>%
+  #  mutate(method = "Wilcoxon",
+  #         info = info_text,
+  #         test = "between cohorts for both strains",
+  #         sign=ifelse(p.value < 0.05, "*", ""))
+  #stats = bind_rows(stats, st)
+
+
+  #between strains per cohort
+  #loop over cohorts 
+  for (k in 1:length(list_of_cohorts)) {
+      stat_data_k <- stat_data %>%
+        filter(Cohort == k) 
+      
+      st = tidy(wilcox.test(param ~ Strain, stat_data_k, paired = FALSE)) %>%
+        mutate(method = "Wilcoxon rank sum",
+               info = info_text,
+               test = paste("between strains for cohort", k),
+               sign=ifelse(p.value < 0.05, "*", ""))
+      stats = bind_rows(stats, st)
+      }
+  
+  
+  #between cohort per strain
+  #loop over strains (hard-coded for 2 strains)
+  for (k in 1:length(list_of_strains)) {
+      stat_data_s <- stat_data %>%
+        filter(Strain == list_of_strains[k])
+      st = tidy(wilcox.test(param ~ Cohort, stat_data_s), paired = TRUE) %>%
+        mutate(method = "Wilcoxon signed rank",
+               info = info_text,
+               test = paste("between cohorts for", list_of_strains[k]),
+               sign=ifelse(p.value < 0.05, "*", ""))
+      stats = bind_rows(stats, st)
+}
+return(stats)
+}
+
+```
+
+
+```{r Beam_walking, fig.width=12, fig.height=4}
+
+#PLOT Latency to cross the beam
+
+# make a new dataframe with grouped data and calculate mean latency for each animal and each diameter 
+mean_trial <- beam_walk_test_keep %>%
+  group_by(cohort, strain, ID, dia_beam) %>%
+  summarise(mean_lat = mean(lat_beam_sec))
+
+#create a plot object, which does not only contain the plot but also the data and meta-information
+latency_to_cross_beam <- mean_trial %>%
+  mutate(#strain = factor(strain, levels = c(list_of_strains)),
+         Cohort = factor(cohort, levels =c(list_of_cohorts)),
+         Strain = factor(strain, levels = c(list_of_strains)),
+         #Strain = as.factor(strain),
+         #Cohort = as.factor(cohort),
+         Diameter= factor(dia_beam, levels = sort(unique(dia_beam),decreasing = TRUE))) %>%
+  #create the actual plot-environment/aesthetics
+  ggplot(aes(x = Strain, y = mean_lat, color = Strain)) +
+  # add a boxplot
+  geom_boxplot(outlier.shape = NULL) +
+  #add the colors for strains
+  scale_colour_manual(values = color_strain) +
+  #add data-points shaped by cohort and not overlapping
+  geom_point(position = position_jitterdodge(), 
+             aes(shape = Cohort), size = 2) +
+  scale_shape_manual(values = c(1,2)) +
+  #define the position of the n= 
+  stat_n_text(y.pos = -1) +
+  # create a grid (columns) by diameter 
+  facet_grid(.~Diameter) +
+  #axis-titles and figure title
+  labs(x="", y = "Time (sec)", title = "Average time to cross beam") +
+  #add a theme
+  theme_pubr() + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) + 
+  #y-axis limits (can be checked with range(mean_trial$mean_lat))
+  scale_y_continuous(limits=c(-2, 60))
+
+latency_to_cross_beam
+
+```
+
+__Figure 1.__ Beam walk test
+
+__Statistics for Figure 1__
+
+```{r beam_walk_stat, echo=F}
+
+#create a tibble called stats
+stats = tibble()
+
+for(beamsize in unique(latency_to_cross_beam$data$dia_beam)){
+  
+  #create a temporary copy of the data with only the selected diameter in each iteration of the loop
+  stats_per_beamsize <- latency_to_cross_beam$data %>%
+    filter(dia_beam == beamsize)
+  
+  #run the make_stats function created earlier, which runs Wilcox rank sum between strains for both cohorts, same between strain for each cohort and Wilcox signed rank between cohorts for each strain and collects the result into one table
+  stats_fig <- make_stats(stats_per_beamsize, "mean_lat", beamsize)
+  #collect the result of each iteration of the loop (each diameter) in the prepared tibble 'stats'
+  stats = bind_rows(stats, stats_fig)
+  
+}
+
+#display stats 
+stats %>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+
+
+```{r Beam_walking2, fig.width=8, fig.height=4}
+
+#Preparation for plot
+
+#create/overwrite 'mean_trial' with a copy of beam_walk_test_keep
+mean_trial <- beam_walk_test_keep %>%
+  #remove rows with entries 'fall' or 'x' in column 'slips'
+  filter(slips != 'fall') %>%
+  filter(slips != 'x') %>%
+  #convert remaining entries in slips to numeric
+  mutate(slips = as.numeric(slips)) %>%
+  #group by individuals and diameter
+  group_by(cohort, strain, ID, dia_beam) %>%
+  #calculate mean per individual and diameter
+  summarise(mean_slip = mean(slips)) 
+
+#check how many animals are removed by the filters above
+removed1 = beam_walk_test_keep %>%
+  filter(slips == 'fall')
+removed2 = beam_walk_test_keep %>%
+  filter(slips == 'x')
+removed=rbind(removed1,removed2) %>% 
+  group_by(cohort, strain, trial, dia_beam) %>% 
+  count()
+
+#PLOT hindslips
+#for explanation compare to first figure
+slips_plot<- mean_trial %>%
+  #left_join(mean_trial, by=c('cohort','ID','dia_beam'))%>%
+  mutate(#strain = factor(strain, levels = c(list_of_strains)),
+         Cohort = factor(cohort, levels =c(list_of_cohorts)),
+         Strain = factor(strain, levels = c(list_of_strains)),
+         Diameter= factor(dia_beam, levels = sort(unique(dia_beam),decreasing = TRUE)),
+         #slips = as.numeric(slips)
+         ) %>%
+  #filter(trial == 1) %>%
+  #filter(Diameter == 20) %>% 
+  ggplot(aes(x = Strain, y = mean_slip, color = Strain)) +
+  geom_boxplot(outlier.shape = NULL) +
+  scale_colour_manual(values = color_strain) +
+  geom_point(position = position_jitterdodge(), 
+             aes(shape = Cohort), size = 2) +
+  scale_shape_manual(values = c(1,2)) +
+  stat_n_text(y.pos = -1) +
+  facet_grid(.~Diameter) +
+  labs(x="", y = "number of slips", title = "Number of hind foot slips ") +
+  theme_pubr() + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+ 
+  #scale_y_continuous(limits=c(0, 60))
+
+slips_plot
+
+```
+
+__Figure 2.__ Beam walk test. Animals that fell or had a 'x' as number of slips are not displayed. (Total number of animals tested for each diameter is 16 for strain CD1 and 11 for strain tweet)
+
+__Statistics for Figure 2__
+
+```{r }
+
+#for explanation compare to stats for first figure
+stats = tibble()
+
+for(beamsize in unique(slips_plot$data$dia_beam)[2:3]){
+  
+  stats_per_beamsize <- slips_plot$data %>%
+    filter(dia_beam == beamsize)
+  
+  stats_fig <- make_stats(stats_per_beamsize, "mean_slip", paste(beamsize, "mm", sep = " "))
+  stats = bind_rows(stats, stats_fig)
+  
+}
+
+stats %>%
+  dplyr::select(-alternative) %>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+
+\newpage
+
+The following animals were excluded due to falling off the beam:
+
+```{r}
+
+# select all animals with entries 'fall' or 'x' in column 'slips'
+fall <- beam_walk_test_keep %>%
+  filter(slips == 'fall' | slips == 'x') %>%
+  #choose the columns mentioned here:
+  dplyr::select(ID, cohort, strain, dia_beam, trial, comments, slips)%>%
+  #format the dataframe into a nice table (compare to stats), longtable allows table to extend over pagebreak
+  kable(booktabs = T, longtable = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+fall
+  
+```
+
+\newpage
+
+__Comments in data for beam walk test__
+
+```{r beam_walk_comments, echo=F}
+
+#Display the comment-dataframe created at the beginning
+beam_walk_test_comments %>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+
+\newpage
+
+******
+
+### Conclusion
+
+******
