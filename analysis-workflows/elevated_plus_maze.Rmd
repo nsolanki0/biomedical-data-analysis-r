@@ -1,0 +1,992 @@
+---
+title: "EPM analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+    
+#output:
+#  pdf_document:
+#    fig_caption: yes
+#    number_sections: yes
+#    toc: yes
+#    df_print: kable
+#  html_document:
+#    df_print: kable
+#    toc: yes
+#    toc_float:
+#      collapsed: false
+#    number_sections: yes
+#    theme: cosmo
+#mainfont: palatino
+#geometry: "left=3cm,right=3cm,top=2cm,bottom=4cm"
+#header-includes:
+#    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+# Empty global environment
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticaly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+#library(ggsignif)
+library(rstatix)
+
+```
+
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file. 
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: Elevated Plus Maze analysis 
+developed by: Narendra Solanki (NS)
+last update: 17.02.2025
+
+Viewer Software:
+This script takes the preprocessed data from the preprocessor_GENERAL.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+The script has the following parts:
+
+# LOAD DATA section:
+  - loads the preprocessed data and tidies it up into a polished "data" data frame
+  
+  - this section is always individualized for the specific project
+  depending on the differences in file names, etc.
+  
+  - first, MAKE SURE the current directory is up-to-date
+  and corresponds to the project folder, which has a data folder.
+  Adjust the file name and the script will automatically load the data from this folder.
+  
+  - NOTE1: 
+  this section also checks if the order of zones is the same for all animals.
+  However, it does not yet include section that solves if the order is inconsistent.
+
+# All the following analysis sections are general.
+
+-->
+
+## Elevated Plus Maze (EPM)
+
+### Experimental conditions
+
+2 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Test\analysis\EPM`  
+
+Preprocessed Data: 
+ 
+2 groups:  
+
+`EPM_data_pm_2025-02-03.xlsx`    
+`EPM_data_wt_2025-02-03.xlsx`   
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\6. Data from Behavioral Test\EPM`    
+
+### Data Quality:  
+->All data can be used. 
+
+```{r OP_data_loading}
+
+rm(list = ls())
+
+### 1.0 LOAD IN DATA ----------------------------------------------------------
+# Load cohort 1 data
+file_path <- "~/6. Data from Behavioral Tests/analysis/EPM/"
+
+raw_data_file_pm <- "EPM_data_pm_2025-02-03.xlsx"
+raw_data_file_wt <- "EPM_data_wt_2025-02-03.xlsx"
+
+data_pm <- read_excel(paste(file_path,raw_data_file_pm,sep=""))
+data_wt <- read_excel(paste(file_path,raw_data_file_wt,sep=""))
+
+# combine all groups to create a single data frame 
+raw_data <- rbind(data_pm, data_wt)
+
+#get list of strains without NAs
+list_of_genotypes <- sort(na.omit(unique(raw_data$genotype)), decreasing = T)
+
+# select relevant data columns
+data <- raw_data %>%
+  # Select relevant columns
+  dplyr::select(no, animal_no, cohort, genotype, gender, contains("Tracklength"), contains("Track length"), contains("Track_length"), contains("Visits"), contains("Visit"), contains("Duration")) 
+
+#names(data)
+
+#lapply(data,class)
+
+data <- data %>%
+  mutate(genotype = factor(genotype),
+         gender = factor(gender)) %>%
+  mutate_at(c(6:34),as.numeric)
+
+```
+
+\newpage
+
+### Analysis of the data
+
+#### Distance travelled in open and closed arms
+
+```{r fig1, fig.align = "left", fig.width=9, fig.height=9}
+
+# data fig1
+data_f1 <- data %>%
+  filter(no == "Sum") %>%
+  mutate(open_distsum = `Tracklength (cm) E open` + `Tracklength (cm) W open`,
+         closed_distsum = `Tracklength (cm) N closed` + `Tracklength (cm) S closed`)
+
+################################# 
+
+## fig1a: open_distsum
+# stats
+stat_1a <- data_f1 %>%
+  wilcox_test(open_distsum ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_1a = data_f1 %>%
+  ggplot(aes(x = genotype, y = open_distsum, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(40,400)) +
+  labs(title="Distance travelled in open arms", 
+       x="", 
+       y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_1a  
+
+# significance
+stat_1a <- stat_1a %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig1a <-  pl_1a +
+  stat_pvalue_manual(
+    stat_1a,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig1a
+
+################################# 
+ 
+## fig1b: open_distsum genderwise
+# stats
+stat_1b <- data_f1 %>%
+  group_by(genotype) %>%
+  wilcox_test(open_distsum ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_1b = data_f1 %>%
+  ggplot(aes(x = genotype, y = open_distsum, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(40,400)) +
+  labs(title="Distance travelled in open arms", 
+       x="", 
+       y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) + 
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=40, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_1b  
+
+# significance
+stat_1b <- stat_1b %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig1b <-  pl_1b +
+  stat_pvalue_manual(
+    stat_1b,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig1b
+  
+################################# 
+
+## fig1c: closed_distsum
+# stats
+stat_1c <- data_f1 %>%
+  wilcox_test(closed_distsum ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_1c = data_f1 %>%
+  ggplot(aes(x = genotype, y = closed_distsum, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(560,1120)) +
+  labs(title="Distance travelled in closed arms", 
+       x="", 
+       y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_1c
+
+# significance
+stat_1c <- stat_1c %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig1c <-  pl_1c +
+  stat_pvalue_manual(
+    stat_1c,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig1c
+
+################################# 
+  
+## fig1d: closed_distsum genderwise
+# stats
+stat_1d <- data_f1 %>%
+  group_by(genotype) %>%
+  wilcox_test(closed_distsum ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_1d = data_f1 %>%
+  ggplot(aes(x = genotype, y = closed_distsum, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(560,1120)) +
+  labs(title="Distance travelled in closed arms", 
+       x="", 
+       y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=560, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_1d
+
+# significance
+stat_1d <- stat_1d %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig1d <-  pl_1d +
+  stat_pvalue_manual(
+    stat_1d,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig1d
+
+################################# 
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig1 <- ggarrange(fig1a, fig1b, fig1c, fig1d, labels="AUTO", ncol=2, nrow=2, common.legend=FALSE, legend = "bottom") 
+
+fig1
+
+```
+
+__Figure 1.__ Distance traveled (cm) in open arms between groups (A) and between gender within group (B), and in closed arms between groups (C) and between gender within group (D). 
+
+\newpage
+
+__Statistics for Figure 1 A (between groups)__
+
+```{r stat1a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 B (between gender)__
+
+```{r stat1b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 C (between groups)__
+
+```{r stat1c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1c %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 D (between gender)__
+
+```{r stat1d, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1d %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Percentage time spent in open and closed arms
+
+```{r fig2, fig.align = "left", fig.width=9, fig.height=9}
+
+# data fig2
+data_f2 <- data %>%
+  filter(no == "Sum") %>%
+  mutate(open_perc = 100*((`Duration (s) E open` + `Duration (s) W open`)/(`Duration (s) E open` + `Duration (s) W open` + `Duration (s) N closed` + `Duration (s) S closed` + `Duration (s) Center zone`)),
+         closed_perc = 100*((`Duration (s) N closed` + `Duration (s) S closed`)/(`Duration (s) E open` + `Duration (s) W open` + `Duration (s) N closed` + `Duration (s) S closed` + `Duration (s) Center zone`)))
+
+################################# 
+
+## fig2a: open_perc
+# stats
+stat_2a <- data_f2 %>%
+  wilcox_test(open_perc ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_2a = data_f2 %>%
+  ggplot(aes(x = genotype, y = open_perc, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(6,32)) +
+  labs(title="Percentage time spent in open arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+#  stat_n_text() +
+  stat_n_text(y.pos = 6) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_2a  
+
+# significance
+stat_2a <- stat_2a %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig2a <-  pl_2a +
+  stat_pvalue_manual(
+    stat_2a,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig2a
+  
+################################# 
+ 
+## fig2b: open_perc genderwise
+# stats
+stat_2b <- data_f2 %>%
+  group_by(genotype) %>%
+  wilcox_test(open_perc ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_2b = data_f2 %>%
+  ggplot(aes(x = genotype, y = open_perc, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(6,32)) +
+  labs(title="Percentage time spent in open arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+#  stat_n_text() +
+  stat_n_text(y.pos = 6) + 
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=6, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_2b  
+
+# significance
+stat_2b <- stat_2b %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig2b <-  pl_2b +
+  stat_pvalue_manual(
+    stat_2b,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig2b
+  
+################################# 
+
+## fig2c: closed_perc
+# stats
+stat_2c <- data_f2 %>%
+  wilcox_test(closed_perc ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_2c = data_f2 %>%
+  ggplot(aes(x = genotype, y = closed_perc, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(45,85)) +
+  labs(title="Percentage time spent in closed arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+#  stat_n_text() +
+  stat_n_text(y.pos = 45) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_2c
+
+# significance
+stat_2c <- stat_2c %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig2c <-  pl_2c +
+  stat_pvalue_manual(
+    stat_2c,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig2c
+
+################################# 
+  
+## fig2d: closed_perc genderwise
+# stats
+stat_2d <- data_f2 %>%
+  group_by(genotype) %>%
+  wilcox_test(closed_perc ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_2d = data_f2 %>%
+  ggplot(aes(x = genotype, y = closed_perc, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(45,85)) +
+  labs(title="Percentage time spent in closed arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+#  stat_n_text() +
+  stat_n_text(y.pos = 45) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=45, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_2d
+
+# significance
+stat_2d <- stat_2d %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig2d <-  pl_2d +
+  stat_pvalue_manual(
+    stat_2d,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig2d
+
+################################# 
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig2 <- ggarrange(fig2a, fig2b, fig2c, fig2d, labels="AUTO", ncol=2, nrow=2, common.legend=FALSE, legend = "bottom") 
+
+fig2
+
+```
+
+__Figure 2.__ Percentage of time spent in open arms between groups (A) and between gender within group (B), and in closed arms between groups (C) and between gender within group (D). 
+
+\newpage
+
+__Statistics for Figure 2 A (between groups)__
+
+```{r stat2a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B (between gender)__
+
+```{r stat2b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 C (between groups)__
+
+```{r stat2c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2c %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 D (between gender)__
+
+```{r stat2d, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2d %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Number of entries in open and closed arms
+
+```{r fig3, fig.align = "left", fig.width=9, fig.height=9}
+
+# data fig3
+data_f3 <- data %>%
+  filter(no == "Sum") %>%
+  mutate(open_entries = (`Visits E open` + `Visits W open`),
+         closed_entries = (`Visits N closed` + `Visits S closed`))
+
+################################# 
+
+## fig3a: open_entries
+# stats
+stat_3a <- data_f3 %>%
+  wilcox_test(open_entries ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_3a = data_f3 %>%
+  ggplot(aes(x = genotype, y = open_entries, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+#  coord_cartesian(ylim=c(6,32)) +
+  labs(title="Percentage time spent in open arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 6) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_3a  
+
+# significance
+stat_3a <- stat_3a %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig3a <-  pl_3a +
+  stat_pvalue_manual(
+    stat_3a,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig3a
+  
+################################# 
+ 
+## fig3b: open_entries genderwise
+# stats
+stat_3b <- data_f3 %>%
+  group_by(genotype) %>%
+  wilcox_test(open_entries ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_3b = data_f3 %>%
+  ggplot(aes(x = genotype, y = open_entries, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+#  coord_cartesian(ylim=c(6,32)) +
+  labs(title="Percentage time spent in open arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 6) + 
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=3, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_3b  
+
+# significance
+stat_3b <- stat_3b %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig3b <-  pl_3b +
+  stat_pvalue_manual(
+    stat_3b,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig3b
+  
+################################# 
+
+## fig3c: closed_entries
+# stats
+stat_3c <- data_f3 %>%
+  wilcox_test(closed_entries ~ genotype) %>%
+  add_significance("p")
+
+# fig
+pl_3c = data_f3 %>%
+  ggplot(aes(x = genotype, y = closed_entries, color = genotype, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  coord_cartesian(ylim=c(5,22)) +
+  labs(title="Percentage time spent in closed arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  stat_n_text(y.pos = 45) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_3c
+
+# significance
+stat_3c <- stat_3c %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig3c <-  pl_3c +
+  stat_pvalue_manual(
+    stat_3c,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig3c
+
+################################# 
+  
+## fig3d: closed_entries genderwise 
+# stats
+stat_3d <- data_f3 %>%
+  group_by(genotype) %>%
+  wilcox_test(closed_entries ~ gender) %>%
+  add_significance("p")
+
+# fig
+pl_3d = data_f3 %>%
+  ggplot(aes(x = genotype, y = closed_entries, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(#aes(colour = factor(genotype), shape=genotype), size = 1, 
+             position = position_jitter(w=0.1), 
+             show.legend = FALSE) + 
+  
+  # Labels & layout
+  geom_text(hjust = 0, nudge_x = 0.05) +
+#  coord_cartesian(ylim=c(45,85)) +
+  labs(title="Percentage time spent in closed arms", 
+       x="", 
+       y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+#  stat_n_text() +
+  stat_n_text(y.pos = 5) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=5, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_3d
+
+# significance
+stat_3d <- stat_3d %>%
+  add_xy_position(x = "genotype", dodge = 0.8)
+fig3d <-  pl_3d +
+  stat_pvalue_manual(
+    stat_3d,  label = "p.signif", tip.length = 0.02
+    )
+#    y.position = 5
+#    )
+
+#fig3d
+
+################################# 
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig3 <- ggarrange(fig3a, fig3b, fig3c, fig3d, labels="AUTO", ncol=2, nrow=2, common.legend=FALSE, legend = "bottom") 
+
+fig3
+
+```
+
+__Figure 3.__ Number of entries in open arms between groups (A) and between gender within group (B), and in closed arms between groups (C) and between gender within group (D). 
+
+\newpage
+
+__Statistics for Figure 3 A (between groups)__
+
+```{r stat3a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 B (between gender)__
+
+```{r stat3b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 C (between groups)__
+
+```{r stat3c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3c %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 D (between gender)__
+
+```{r stat3d, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3d %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+*********
+
+### Conclusion
+
+*********
