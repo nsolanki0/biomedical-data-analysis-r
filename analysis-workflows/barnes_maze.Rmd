@@ -1,0 +1,1664 @@
+---
+title: "Barnes maze Test Analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+    
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+# Empty global environment
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticaly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+
+
+
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Barnes maze analysis
+author: Narendra Solanki (NS)
+last update: 29.11.2024
+
+#### Comments
+
+### raw data modificitions (): 
+# create a folder with probe test data: "allmice_BM_test_d5_d14"
+
+### each file - modificiations done by hand:
+# transpose the csv data into columns
+# add the day of test
+# remove first line
+
+#### TO DO Before R: data (viewer) to group using the tool "concatenator" : append the multiple individual data files into one file
+
+### parameters test:
+# Length [cm]; Speed [cm/s]; Esc. Lat. [s] (escape latency); W. holes (wrong holes); C. holes (correct); A. holes (Allholes)
+# manual: the number of errors (nosepokes or head dips in non-target holes) , latency to target hole, path length, and duration within the target quadrant
+
+
+### VARIABLES - MWM
+
+####### Training #######
+# conditions: 4 trials per day X4 training days, plateform is in SW quadrant and start quadrant is different for each trial of a day (same sequence between days)
+
+# Distance traveled to reach the plateform (total or per bins of 5sec):
+#col.14: Interval.summary_Track.length..cm.
+#### for now, only use the "sum". The trial number (1 to 4) need to be added for each animal and each day to be able to average the equivalent bin together
+
+# Latency to climb on the platform:
+#last time recorded in col.11 (Interval.summary_Run.time) of the "sum" line in col.9 (Interval.summary_No.)
+
+-->
+
+## Barnes maze analysis
+
+-- **Illustration:**  
+Boxplots and individual scores  
+
+```{r setup, include=FALSE}
+
+# change to data directory
+knitr::opts_knit$set(root.dir = "~/AOCF-Behavioral Tests/Barnes Maze test/control data/group data/")
+
+getwd()
+
+```
+
+### Experimental conditions
+
+4 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `AOCF-Behavioral Tests\Barnes Maze test\control data\group data`  
+
+Preprocessed Data: 
+ 
+4 groups:  
+
+`190510_A_Barnes_TrainingD5_List-Copy.csv`    
+`190517_A_Barnes_TrainingD12_list-Copy.csv`   
+`B_Barnes_TrainingD5_240721_list.csv`   
+`B_Barnes_TrainingD12_310721_list-Copy.csv`   
+`180323_barnes_test_d5_list.csv`   
+`180330_barnes_test_d14_list-Copy.csv`   
+`180330_barnes2_test_d5_list.csv`    
+`180406_barnes2_test_d14_list.csv`   
+
+`Barnes Maze test_gr1_2024-11-15.xlsx`    
+`Barnes Maze test_gr2_2024-11-15.xlsx`    
+`Barnes Maze test_gr4_2024-11-15.xlsx`    
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `AOCF-Behavioral Tests\Barnes Maze test\control data\group data`    
+
+### Data Quality:  
+->All data can be used. 
+
+```{r barnes_maze_data_loading}
+
+# Empty global environment
+#rm(list = ls())
+
+### 1. File path
+getwd()
+
+#file_path <- getwd()
+file_path <- "~/AOCF-Behavioral Tests/Barnes Maze test/control data/group data/"
+
+### 2. Load data files from plug in ..
+# From group 1
+coh_1_d5 <- file.choose() 
+coh_1_d12 <- file.choose() 
+
+
+# From group 2
+coh_2_d5 <- file.choose() 
+coh_2_d12 <- file.choose() 
+
+
+# From group 4, cohort 1
+coh_41_d5 <- file.choose() 
+coh_41_d12 <- file.choose() 
+
+# From group 4, cohort 2
+coh_42_d5 <- file.choose() 
+coh_42_d12 <- file.choose()
+
+
+# Read data files
+# group 1
+my.data.d5.1 <- read.csv(coh_1_d5, header=T, skip=1, dec = ",") 
+my.data.d5.1$test <- "day5"
+my.data.d5.1$gr <- "1"
+my.data.d5.1$Esc..Lat...s. <- as.numeric(my.data.d5.1$Esc..Lat...s.)  
+#my.data.d5.1 <- my.data.d5.1 %>% 
+#  mutate(Animal = as.character(No..1))
+
+my.data.d12.1 <- read.csv(coh_1_d12, header=T, skip=1, sep ="\t", dec = ",") 
+my.data.d12.1$test <- "day12"
+my.data.d12.1$gr <- "1"
+my.data.d12.1$Esc..Lat...s. <- as.numeric(my.data.d12.1$Esc..Lat...s.)
+my.data.d12.1 <- my.data.d12.1[-1,]
+#my.data.d12.1 <- my.data.d12.1 %>% 
+#  mutate(Animal = as.character(No..1))
+
+
+# group 2
+my.data.d5.2 <- read.csv(coh_2_d5, header=T, skip=1, dec = ",")  
+my.data.d5.2$test <- "day5"
+my.data.d5.2$gr <- "2"
+#my.data.d5.2$Esc..Lat...s. <- as.numeric(my.data.d5.2$Esc..Lat...s.)
+#my.data.d5.2 <- my.data.d5.2 %>% 
+#  mutate(Animal = as.character(No..1))
+
+my.data.d12.2 <- read.csv(coh_2_d12, header=T, skip=1, sep ="\t", dec = ",") 
+my.data.d12.2$test <- "day12"
+my.data.d12.2$gr <- "2"
+my.data.d12.2$Esc..Lat...s. <- as.numeric(my.data.d12.2$Esc..Lat...s.)
+#my.data.d12.2 <- my.data.d12.2 %>% 
+#  mutate(Animal = as.character(No..1)) 
+
+
+# group 4, cohort 1
+my.data.d5.41 <- read.csv(coh_41_d5, header=T, skip=1, dec = ",")  
+my.data.d5.41$test <- "day5"
+#my.data.d5.41$gr <- "41"
+my.data.d5.41$gr <- "4"
+#my.data.d5.41$Esc..Lat...s. <- as.numeric(my.data.d5.41$Esc..Lat...s.)
+#my.data.d5.41 <- my.data.d5.41 %>% 
+#  mutate(Animal = as.character(No..1))
+
+my.data.d12.41 <- read.csv(coh_41_d12, header=T, skip=1, dec = ",") 
+my.data.d12.41$test <- "day12"
+#my.data.d12.41$gr <- "41"
+my.data.d12.41$gr <- "4"
+my.data.d12.41$Esc..Lat...s. <- as.numeric(my.data.d12.41$Esc..Lat...s.)
+#my.data.d12.41 <- my.data.d12.41 %>% 
+#  mutate(Animal = as.character(No..1)) 
+
+
+# group 4, cohort 2
+my.data.d5.42 <- read.csv(coh_42_d5, header=T, skip=1, dec = ",") 
+my.data.d5.42$test <- "day5"
+#my.data.d5.42$gr <- "42"
+my.data.d5.42$gr <- "4"
+my.data.d5.42 <- my.data.d5.42[-3,]
+my.data.d5.42 <- my.data.d5.42[-3,]
+
+my.data.d5.42 <- my.data.d5.42[-7,]
+#my.data.d5.42$Esc..Lat...s. <- as.numeric(my.data.d5.42$Esc..Lat...s.)
+#my.data.d5.42 <- my.data.d5.42 %>% 
+#  mutate(Animal = as.character(No..1)) 
+
+my.data.d12.42 <- read.csv(coh_42_d12, header=T, skip=1, dec = ",") 
+my.data.d12.42$test <- "day12"
+#my.data.d12.42$gr <- "42"
+my.data.d12.42$gr <- "4"
+my.data.d12.42 <- my.data.d12.42[-3,]
+my.data.d12.42 <- my.data.d12.42[-3,]
+
+my.data.d12.42 <- my.data.d12.42[-7,]
+#my.data.d12.42$Esc..Lat...s. <- as.numeric(my.data.d12.42$Esc..Lat...s.)
+#my.data.d12.42 <- my.data.d12.42 %>% 
+#  mutate(Animal = as.character(No..1))
+
+# Create data file with all data
+df1 <- rbind(my.data.d5.1, my.data.d5.2, my.data.d5.41, my.data.d5.42)
+df2 <- rbind(my.data.d12.1, my.data.d12.2, my.data.d12.41, my.data.d12.42)
+
+my.data.bm.1 <- full_join(df1, df2 , by=NULL) 
+my.data.bm.1$gr <- as.numeric(my.data.bm.1$gr)
+names(my.data.bm.1)[names(my.data.bm.1) == 'No..1'] <- 'Animal'
+
+
+##
+# Load lookup data files
+lookup_file <- "group data look up.xlsx"
+
+# Read lookup data files
+lookup.geno <- read_excel(paste(file_path,lookup_file,sep=""))
+names(lookup.geno)[names(lookup.geno) == 'animal number'] <- 'Animal'
+#lookup.geno$Animal <- as.integer()
+names(lookup.geno)[names(lookup.geno) == 'group data'] <- 'gr'
+
+lookup.geno <- lookup.geno %>% 
+  mutate(Animal = as.integer(Animal))
+
+my.data.bm <- full_join(my.data.bm.1,lookup.geno , by= c("gr", "Animal")) 
+#my.data.bm <- my.data.bm %>% mutate ('Length [cm]' = as.integer('Length [cm]')) # NA made this column as.character ->need it as.numeric
+
+#withna <- my.data.bm
+#my.data.bm <- withna
+
+#remove all rows with a missing value in any column
+my.data.bm <- my.data.bm[complete.cases(my.data.bm[,10]), ]
+my.data.bm <- my.data.bm[complete.cases(my.data.bm[,21]), ]
+
+
+my.data.bm$test <- factor(my.data.bm$test, levels = c("day5","day12"), labels = c("D5","D12")) # order the days non-alphabetically
+
+my.data.bm <- my.data.bm %>% 
+  mutate(perc.correct = (`C..holes` *100)/`A..holes`)
+
+my.data.bm <- my.data.bm[-38,]
+my.data.bm <- my.data.bm[-21,]
+
+```
+
+```{r barnes_maze_data_loading_lat}
+
+### 1. File path
+file_path_lat <- "~/AOCF-Behavioral Tests/Barnes Maze test/control data/group data/data_lat/"
+
+### 2. Load data file (all cohort, both d5 and d12)
+rdata_lat1 <- "Barnes Maze test_gr1_2024-11-15.xlsx"
+rdata_lat2 <- "Barnes Maze test_gr2_2024-11-15.xlsx"
+rdata_lat4 <- "Barnes Maze test_gr4_2024-11-15.xlsx"
+
+# Read data file
+data_lat1 <- read_excel(paste(file_path_lat,rdata_lat1,sep=""))
+
+data_lat1 <- data_lat1 %>%
+  # Select relevant columns
+  dplyr::select(No., Animal, gr, Day, `Duration (s) Zone_goal_area`, `Duration (s) Zone_Left_of_goal_area`, `Duration (s) Zone_opposite_goal_area`, `Duration (s) Zone_right_of_goal_area`) %>%
+  mutate(time_total = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_Left_of_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_area`))) %>%
+  mutate(perc_right = as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_area`))*100/time_total,
+         perc_left = as.numeric(sub(",", ".", `Duration (s) Zone_Left_of_goal_area`))*100/time_total,
+         perc_opp = as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_area`))*100/time_total,
+         perc_goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`))*100/time_total)
+
+# Read data file
+data_lat2 <- read_excel(paste(file_path_lat,rdata_lat2,sep=""))
+
+data_lat2 <- data_lat2 %>%
+  # Select relevant columns
+  dplyr::select(No., Animal, gr, Day, `Duration (s) Zone_goal_area`, `Duration (s) Zone_Left_of_goal_area`, `Duration (s) Zone_opposite_goal_area`, `Duration (s) Zone_right_of_goal_area`) %>%
+  mutate(time_total = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_Left_of_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_area`)) + as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_area`))) %>%
+  mutate(perc_right = as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_area`))*100/time_total,
+         perc_left = as.numeric(sub(",", ".", `Duration (s) Zone_Left_of_goal_area`))*100/time_total,
+         perc_opp = as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_area`))*100/time_total,
+         perc_goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`))*100/time_total)
+
+# Read data file
+data_lat4 <- read_excel(paste(file_path_lat,rdata_lat4,sep=""))
+
+data_lat4 <- data_lat4 %>%
+  # Select relevant columns
+  dplyr::select(No., Animal, gr, Day, `Duration (s) Zone_goal_zone`, `Duration (s) Zone_left_of_goal_zone`, `Duration (s) Zone_opposite_goal_zone`, `Duration (s) Zone_right_of_goal_zone`) %>%
+  mutate(time_total = as.numeric(sub(",", ".", `Duration (s) Zone_goal_zone`)) + as.numeric(sub(",", ".", `Duration (s) Zone_left_of_goal_zone`)) + as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_zone`)) + as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_zone`))) %>%
+  mutate(perc_right = as.numeric(sub(",", ".", `Duration (s) Zone_right_of_goal_zone`))*100/time_total,
+         perc_left = as.numeric(sub(",", ".", `Duration (s) Zone_left_of_goal_zone`))*100/time_total,
+         perc_opp = as.numeric(sub(",", ".", `Duration (s) Zone_opposite_goal_zone`))*100/time_total,
+         perc_goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_zone`))*100/time_total)
+
+data_lat4$Day <- str_replace(data_lat4$Day, "D14", "D12")
+
+colnames(data_lat4)[which(colnames(data_lat4) %in% c("Duration (s) Zone_goal_zone", "Duration (s) Zone_left_of_goal_zone", "Duration (s) Zone_opposite_goal_zone", "Duration (s) Zone_right_of_goal_zone"))] <- c("Duration (s) Zone_goal_area","Duration (s) Zone_Left_of_goal_area","Duration (s) Zone_opposite_goal_area","Duration (s) Zone_right_of_goal_area")
+
+# subset data with only animals present in my.data.bm
+a1 <- my.data.bm %>%
+  filter(gr == 1) 
+a1a <- unique(a1$Animal)
+
+data_lat1$Animal <- as.numeric(data_lat1$Animal)
+data_lat1s <- subset(data_lat1, Animal %in% a1a)
+
+a2 <- my.data.bm %>%
+  filter(gr == 2) 
+a2a <- unique(a2$Animal)
+
+data_lat2$Animal <- as.numeric(data_lat2$Animal)
+data_lat2s <- subset(data_lat2, Animal %in% a2a)
+
+a4 <- my.data.bm %>%
+  filter(gr == 4) 
+a4a <- unique(a4$Animal)
+
+data_lat4$Animal <- as.numeric(data_lat4$Animal)
+data_lat4s <- subset(data_lat4, Animal %in% a4a)
+
+# concatenate to create one df
+data_lat <- bind_rows(data_lat1s,data_lat2s,data_lat4s)
+data_lat$Day <- as.factor(data_lat$Day)
+
+# add gender column 
+data_lat <- data_lat %>% 
+  mutate(sex = case_when(
+    Animal == 214 ~ "m",
+    Animal == 217 ~ "f",
+    Animal == 218 ~ "f",
+    Animal == 222 ~ "f",
+    Animal == 237 ~ "m",
+    Animal == 238 ~ "m",
+    Animal == 241 ~ "m",
+    Animal == 250 ~ "f",
+    Animal == 415 ~ "m",
+    Animal == 420 ~ "m",
+    Animal == 422 ~ "m",
+    Animal == 423 ~ "f",
+    Animal == 428 ~ "m",
+    Animal == 435 ~ "f",
+    Animal == 439 ~ "f",
+    Animal == 445 ~ "m",
+    Animal == 460 ~ "f",
+    Animal == 11 ~ "f",
+    Animal == 12 ~ "f",
+    Animal == 13 ~ "f",
+    Animal == 14 ~ "f",
+    Animal == 51 ~ "f",
+    Animal == 52 ~ "f",
+    Animal == 53 ~ "f",
+    Animal == 55 ~ "f",
+    Animal == 15 ~ "f",
+    Animal == 16 ~ "f",
+    Animal == 17 ~ "f",
+    Animal == 18 ~ "f",
+    Animal == 36 ~ "f",
+    Animal == 37 ~ "f",
+    Animal == 38 ~ "f"))
+
+```
+
+\newpage
+
+### Results
+
+#### Path length 
+
+```{r BM_path_length_coh1g, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.0 ANALYSIS OF THE DATA --------------------------------------------------
+
+### 3.1 Path LENGTH -----------------------------------------------------------
+
+# Plot
+pl.length1 <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  ggplot(aes(x=factor(gr), y=Length..cm., colour = factor(gr))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(gr)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Length (cm)", title = "Path length") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.length1
+
+pl.length1g <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  ggplot(aes(x=factor(gr), y=Length..cm., colour = factor(sex))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(sex)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Length (cm)", title = "Path length") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), size=4, show.legend = FALSE) +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.length1g
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig1 <- ggarrange(pl.length1, pl.length1g, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig1
+
+```
+
+__Figure 1.__ Comparison of Path Length (cm) between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 1 A__
+
+```{r BM_path_length_coh1_stat, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig1d5 <- pl.length1$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+# perform Kruskal-Wallis Rank Sum Tests to compare between genotype difference
+#st <- tidy(kruskal.test (`Length [cm]`~ genotype, data=datafig1d5)) %>%
+#  mutate(method = "Kruskal-Wallis Sum",
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig1d5$Length..cm., datafig1d5$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 1, d5, path length (cm)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  
+## d14 between genotypes
+datafig1d14 <- pl.length1$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+# perform Kruskal-Wallis Rank Sum Tests to compare between genotype difference
+#st <- tidy(kruskal.test (`Length [cm]`~ genotype, data=datafig1d5)) %>%
+#  mutate(method = "Kruskal-Wallis Sum",
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig1d14$Length..cm., datafig1d14$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 1, d12, path length (cm)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 1 B (Between genders)__
+
+```{r BM_path_length_coh1g_stat1, echo=F}
+
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+
+# get list of cohorts
+list_of_genders <- c("f", "m")
+list_of_genders <- as.factor(list_of_genders)
+
+# get list of genotypes
+list_of_grs <- c(1, 2) #because only females in  gr4
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 within genotype
+datafig1ad5 <- pl.length1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig1ad5 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference   datafig1d5$Length..cm.
+  st = tidy(wilcox.test(stat_data$Length..cm. ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 1, d5, path length (cm)",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig1ad14 <- pl.length1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4))) 
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig1ad14 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$Length..cm. ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 1, d12, path length (cm)",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 1 B (Between groups)__
+
+```{r BM_path_length_coh1g_stat2, echo=F}
+
+# BETWEEN GENOTYPE WITHIN SAME GENDERS
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 within genotype
+datafig1bd5 <- pl.length1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+  
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig1bd5 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$Length..cm., stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 1, d5, path length (cm)",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig1bd14 <- pl.length1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4))) 
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig1bd14 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$Length..cm., stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 1, d12, path length (cm)",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+\newpage
+
+#### Number of errors 
+
+```{r BM_erros_coh1g, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.2 Number of Errors-------------------------------------------------------
+
+# Plot
+pl.wrong1 <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  
+  ggplot(aes(x=factor(gr), y=W..holes, colour = factor (gr))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(gr)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Total no. of visits to wrong hole", title = "Errors") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.wrong1
+
+pl.wrong1g <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  ggplot(aes(x=factor(gr), y=W..holes, colour = factor (sex))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(sex)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Total no. of visits to wrong hole", title = "Errors") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), size=4, show.legend = FALSE) +  
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.wrong1g
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig2 <- ggarrange(pl.wrong1, pl.wrong1g, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig2
+
+```
+
+__Figure 2.__ Comparison of Number of visits to the wrong hole between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 2 A__
+
+```{r BM_errors_coh1_stat, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig2d5 <- pl.wrong1$data %>%
+  filter(test == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))  
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig2d5$W..holes, datafig2d5$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 2, d5, errors",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  
+## d14 between genotypes
+datafig2d14 <- pl.wrong1$data %>%
+  filter(test == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig2d14$W..holes, datafig2d14$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+         variable = "Fig 2, d12, errors",
+         test = paste("between grs"), 
+         sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 2 B (Between genders)__
+
+```{r BM_errors_coh1g_stat1, echo=F}
+
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+
+#create a tibble to collect all stats
+stats = tibble()
+ 
+## d5 within genotype
+datafig2ad5 <- pl.wrong1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+ 
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig2ad5 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference   datafig1d5$Length..cm.
+  st = tidy(wilcox.test(stat_data$W..holes ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 2, d5, errors",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig2ad14 <- pl.wrong1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4))) 
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig2ad14 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$W..holes ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 2, d14, errors",
+          test = paste("between genders for group", list_of_grs[i]),
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 2 B (Between groups)__
+
+```{r BM_errors_coh1g_stat2, echo=F}
+
+# BETWEEN GENOTYPE WITHIN SAME GENDERS
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 within genotype
+datafig2bd5 <- pl.wrong1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig2bd5 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$W..holes, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 2, d5, errors",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig2bd14 <- pl.wrong1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig2bd14 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$W..holes, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 2, d14, errors",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+\newpage
+
+#### Latency to the correct hole
+
+```{r BM_latency_coh1g, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.3 Latency to correct hole------------------------------------------------
+
+# Plot
+pl.lat1 <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  
+  ggplot(aes(x=factor(gr), y=Esc..Lat...s., colour = factor (gr))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(gr)),  
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Latency to correct hole (s)", title = "Latency to correct hole") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.lat1
+
+pl.lat1g <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  
+  ggplot(aes(x=factor(gr), y=Esc..Lat...s., colour = factor (sex))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(sex)),  
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Latency to correct hole (s)", title = "Latency to correct hole") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), vjust = 3, size=4, show.legend = FALSE) +  
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.lat1g
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig3 <- ggarrange(pl.lat1, pl.lat1g, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig3
+
+```
+
+__Figure 3.__ Comparison of Latency to the goal zone between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 3 A__
+
+```{r BM_latency_coh1_stat, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig3d5 <- pl.lat1$data %>%
+  filter(test == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))  
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig3d5$Esc..Lat...s., datafig3d5$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 3, d5, latency",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  
+## d14 between genotypes
+datafig3d14 <- pl.lat1$data %>%
+  filter(test == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig3d14$Esc..Lat...s., datafig3d14$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+         variable = "Fig 3, d12, latency",
+         test = paste("between grs"), 
+         sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 3 B (Between genders)__
+
+```{r BM_latency_coh1g_stat1, echo=F}
+
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+
+#create a tibble to collect all stats
+stats = tibble()
+ 
+## d5 within genotype
+datafig3ad5 <- pl.lat1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig3ad5 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$Esc..Lat...s. ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 3, d5, latency",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig3ad14 <- pl.lat1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig3ad14 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$Esc..Lat...s. ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 3, d12, latency",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 3 B (Between groups)__
+
+```{r BM_latency_coh1g_stat2, echo=F}
+
+# BETWEEN GENOTYPE WITHIN SAME GENDERS
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 within genotype
+datafig3bd5 <- pl.lat1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig3bd5 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$Esc..Lat...s., stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 3, d5, latency",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig3bd14 <- pl.lat1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4))) 
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig3bd14 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$Esc..Lat...s., stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 3, d12, latency",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+\newpage
+
+#### Percentage visits to the correct hole
+
+```{r BM_per_latency_coh1g, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.4 Percentage visits to correct hole--------------------------------------
+
+# Plot
+pl.perc1 <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  
+  ggplot(aes(x=factor(gr), y=perc.correct, colour = factor (gr))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(gr)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Visits to correct hole (%)", title = "Correct visits (%)") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.perc1
+
+pl.perc1g <- my.data.bm %>%
+#  filter(cohort == 1) %>%
+  
+  ggplot(aes(x=factor(gr), y=perc.correct, colour = factor (sex))) +
+  geom_boxplot() + 
+  facet_grid (~test) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(sex)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Visits to correct hole (%)", title = "Correct visits (%)") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), vjust = 2, size=4, show.legend = FALSE) +   
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#pl.perc1g
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig4 <- ggarrange(pl.perc1, pl.perc1g, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig4
+
+```
+
+__Figure 4.__ Comparison of Percentage of visits to the correct hole between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 4 A__
+
+```{r BM_per_latency_coh1_stat, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig4d5 <- pl.perc1$data %>%
+  filter(test == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))  
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig4d5$perc.correct, datafig4d5$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 4, d5, correct visit (%)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+## d14 between genotypes
+datafig4d14 <- pl.perc1$data %>%
+  filter(test == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4)))
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig4d14$perc.correct, datafig4d14$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 4, d12, correct visit (%)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 4 B (Between genders)__
+
+```{r BM_per_latency_coh1g_stat1, echo=F}
+
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+
+#create a tibble to collect all stats
+stats = tibble()
+ 
+## d5 within genotype
+datafig4ad5 <- pl.perc1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig4ad5 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$perc.correct ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 4, d5, correct visit (%)",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig4ad14 <- pl.perc1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig4ad14 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$perc.correct ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+          variable = "Fig 4, d12, correct visit (%)",
+          test = paste("between genders for group", list_of_grs[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 4 B (Between groups)__
+
+```{r BM_per_latency_coh1g_stat2, echo=F}
+
+# BETWEEN GENOTYPE WITHIN SAME GENDERS
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 within genotype
+datafig4bd5 <- pl.perc1g$data %>%
+  filter(test == "D5") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig4bd5 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$perc.correct, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 4, d5, correct visit (%)",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig4bd14 <- pl.perc1g$data %>%
+  filter(test == "D12") %>%
+  #convert sex and grs into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1, 2, 4))) 
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig4bd14 %>%
+    filter(sex == list_of_genders[i])
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$perc.correct, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 4, d12, correct visit (%)",
+          test = paste("between groups for", list_of_genders[i]), 
+          sign = ifelse(p.value < 0.05, "*", ""))
+ 
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+\newpage
+
+#### Duration in goal quadrant 
+
+```{r BM_goal_dur_coh1g, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.5 Duration in goal quadrant----------------------------------------------
+
+##
+plGoalDur1 <- data_lat %>%
+  filter(No. == "Sum") %>%
+  #convert strain and cohort into factors 
+  mutate(goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`))) %>% 
+  ggplot(aes(x=factor(gr), y=goal, colour = factor (gr))) +
+  geom_boxplot() + 
+  facet_grid (~Day) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(gr)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Duration in goal quadrant (s)", title = "Duration in goal quadrant") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#plGoalDur1           
+
+plGoalDur1g <- data_lat %>%
+  filter(No. == "Sum") %>%
+  #convert strain and cohort into factors 
+  mutate(goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`))) %>% 
+  ggplot(aes(x=factor(gr), y=goal, colour = factor (sex))) +
+  geom_boxplot() + 
+  facet_grid (~Day) + #labeller=labeller(repetition = labels))+  # divide per repetition and rename facet label
+  geom_point(aes(colour = factor(sex)),
+             position = position_jitter(w=0.1, h=0.1),
+             show.legend = FALSE) +
+  # Labels & layout
+  labs(x="",y="Duration in goal quadrant (s)", title = "Duration in goal quadrant") +
+  theme_classic() +
+  theme_pubr() +
+  #add 'n='
+  stat_n_text() +
+  geom_text(aes(label=after_stat(count), y = after_stat(count)), stat="count", position = position_dodge(width = 0.95), vjust = 4, size=4, show.legend = FALSE) +
+#  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=4) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+         
+#plGoalDur1g
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig5 <- ggarrange(plGoalDur1, plGoalDur1g, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig5
+
+```
+
+__Figure 5.__ Comparison of duration in goal quadrant between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 5 A__
+
+```{r BM_goal_dur_coh1_stat, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig5d5 <- plGoalDur1$data %>%
+  filter(Day == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))  
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig5d5$goal, datafig5d5$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 5, d5, time in goal (s)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+
+## d14 between genotypes
+datafig5d14 <- plGoalDur1$data %>%
+  filter(Day == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))  
+  
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(datafig5d14$goal, datafig5d14$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 5, d12, time in goal (s)",
+           test = paste("between grs"), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 5 B (Between genders)__
+
+```{r BM_goal_dur_coh1g_stat1, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig5ad5 <- plGoalDur1g$data %>%
+  filter(Day == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))  
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig5ad5 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$goal ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+           variable = "Fig 5, d5, time in goal (s)",
+           test = paste("between genders for group", list_of_grs[i]), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig5ad14 <- plGoalDur1g$data %>%
+  filter(Day == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))  
+
+for (i in 1:length(list_of_grs)) {
+  stat_data <- datafig5ad14 %>%
+    filter(gr == list_of_grs[i])
+# perform Wilcoxon Rank Sum Tests to compare between group difference
+  st = tidy(wilcox.test(stat_data$goal ~ stat_data$sex, exact = FALSE)) %>%
+   mutate(method = "Wilcoxon Sum",
+           variable = "Fig 5, d12, time in goal (s)",
+           test = paste("between genders for group", list_of_grs[i]), 
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+
+__Statistics for Figure 5 (Between groups)__
+
+```{r BM_goal_dur_coh1g_stat2, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+## d5 between genotypes
+datafig5bd5 <- plGoalDur1g$data %>%
+  filter(Day == "D5") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))  
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig5bd5 %>%
+    filter(sex == list_of_genders[i])
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$goal, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 5, d5, time in goal (s)",
+           test = paste("between groups for", list_of_genders[i]),  
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+## d14 within genotype
+datafig5bd14 <- plGoalDur1g$data %>%
+  filter(Day == "D12") %>%
+  #convert strain and cohort into factors 
+  mutate(sex=factor(sex, levels = c("m", "f")),   
+         gr=factor(gr, levels = c(1,2,4))) #,
+#         goal = as.numeric(sub(",", ".", `Duration (s) Zone_goal_area`)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data <- datafig5bd14 %>%
+    filter(sex == list_of_genders[i])
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(stat_data$goal, stat_data$gr, exact = FALSE, p.adjust.methods="BH")) %>%
+   mutate(method = "Pairwise Wilcoxon Sum",
+           variable = "Fig 5, d12, time in goal (s)",
+           test = paste("between groups for", list_of_genders[i]),  
+           sign = ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+  
+#st_tracklength = stats
+
+```
+******
+
+### Conclusion
+       
+******

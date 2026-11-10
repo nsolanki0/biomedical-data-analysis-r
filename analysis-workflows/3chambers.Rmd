@@ -1,0 +1,1563 @@
+---
+title: "3 chamber sociability test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(grid)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(randomcoloR)
+library(gtable)
+library(ggrepel)
+library(tinytex)
+library(EnvStats)
+library(knitr)
+library(kableExtra)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: 3 chamber sociability test analysis
+author: Narendra Solanki (NS)
+last update: 11.11.2022
+
+This script takes the preprocessed data from the PREPROCESSOR.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : Output from PREPROCESSOR_GENERAL_CW.R (.xlsx file)
+                   lookup file (.xlsx)
+             
+CURRENT SETTINGS : ONLY TESTED FOR THE SCHARFF PROJECT!!!
+                   2 Cohorts 
+                   2 strains
+                   > This means the script is currently able to analyze a project consisting of the settings above. For all other 
+                     settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the preprocessed data and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 Duration of Interaction
+                    3.2 Discrimination ratio or preference for the unfamiliar
+                    3.3 Habituation phase
+                    
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+
+
+NOTES             : - This script has been tested on the Project 'X'. 
+                      Variations in the zone naming may lead to errors
+                      > if this occurs there are two options:
+                          1. Rerun the preprocessor and use the zone names as in the above project
+                             (left zone, center zone, right zone, empty, S1, S2)
+                             
+                             OR
+                             
+                          2. Replace the column references in this script for the analysis
+                    
+                    - Make sure that the zones in Cohort 1 and Cohort 2 are named identically otherwise the merging step will not be able to find the matching zones
+                      (this can be adjusted in the Preprocessing)
+
+
+ISSUES To FIX     :
+
+-->
+
+
+
+## 3 Chamber Sociability Test
+
+-- **Duration - 3 times 10 minutes [habituation, social preference, social recognition]**   
+Spontaneous social interaction can be rapidly and objectively assessed in the ‘sociability test’ followed by the ‘preference for social novelty test’ in the tripartite chamber. These two tasks take advantage of the spontaneous interest of a normal mouse for another unfamiliar mouse. These tests can be used to model symptoms of human disorders associated with social approach abnormalities such as autism, William’s syndrome, social phobias and schizophrenia (Yang et al., 2011; Moy et al., 2004).  
+
+- *Moy SS, Nadler JJ, Perez A, Barbaro RP, Johns JM, Magnuson TR, Piven J, Crawley JN. Sociability and preference for social novelty in five inbred strains: an approach to assess autistic-like behavior in mice. Genes Brain Behav. 2004 Oct;3(5):287-302. doi: 10.1111/j.1601-1848.2004.00076.x. PMID: 15344922*  
+
+- *Yang, M., Silverman, J. L. & Crawley, J. N. Automated three-chambered social approach task for mice. Curr. Protoc. Neurosci. Chapter 8, Unit 8.26 (2011).*   
+
+-- **Parameters\:**   
+Primary variable of interest: time spent in each chamber (habituation and both tests), time spent at each grid (during both tests: at stranger 1, stranger 2 and empty), Discrimination ratio [Discrimination Ratio = (Time spent at Novel animal (Stranger2) [TN] - Time spent at Familiar animal (Stranger 1) [TF])/(TN + TF)].  
+Secondary variables: number of visits to each chamber, latency to each chamber, track length. 
+
+
+-- **Illustration:**  
+Boxplots and individual scores  
+
+```{r data_loading_3ch}
+
+#here we clear the working directory again in case the script is used as a child
+rm(list = ls())
+#save the path to the working direcotry into the variable dir
+dir = getwd()
+
+#--------------------------- 1. Manual Entries -----------------------------#
+# Please enter here the following variables:
+
+# 1.1 INPUT FILES 
+#IMPORTANT: Please also check the renaming of the columns in 'LOAD DATA' !!!!!!
+file_path <- "~/6. Data from Behavioral Tests/analysis/3 chamber test/"
+
+file_path_MR <- "~/6. Data from Behavioral Tests/analysis/3 chamber test/"
+
+raw_data_file <- "2001_Rosario_A46_3 chamber test_data_Cohort 1_2022-11-11.csv"
+
+lookup_path <- "~/6. Data from Behavioral Tests/"
+lookup_path_MR <- "~/6. Data from Behavioral Tests/"
+ 
+lookup_file_c1 <- "Rosario_A46_Real_lookup.xlsx"
+
+# 1.3 PLOT
+#here we define the colors we going to use for the different strains in the plots
+color_strain <- c("#0099CC", "#FF9900") 
+
+color_flu <- c('#0099CC', '#FF9900', '#DC143C', '#8B008B')
+# colors for Geiger project that has 4 treatment strains
+
+color_control <- c('#8B008B', '#0000FF', '#008000')
+# colors for control data for all 5 projects
+
+#---------------------------LOAD DATA-----------------------------#
+# Load data
+#evaluate read_excel function with given filepath
+raw_data <- read_delim(paste(file_path,raw_data_file, sep=""), delim=",") 
+  
+# Load lookup file with ID, cohort and genotype infos
+#evaluate read_excel function with given filepath
+lookup <- tryCatch(read_excel(paste(lookup_path,lookup_file_c1, sep="")), # Process any error messages and try another filepath
+                   error= function(e) {
+  #print a small message with both filepaths
+  print(paste0('filepath: ', lookup_path, ' not found! Trying ', lookup_path_MR, ' instead.'))
+  lookup <- read_excel(paste(lookup_path_MR,lookup_file_c1, sep=""))
+})
+
+# Generate colors for individual animals (with lookup file)
+IDcolor <- tibble(IDcolor=distinctColorPalette(length(lookup$ID)))
+
+#create a dataframe with with cohort, ID and IDcolor 
+lookup_color <- lookup %>%
+  dplyr::select(cohort,ID) %>%
+#  dplyr::select(cohort,ID, "S1/side", "S2/side") %>%
+  bind_cols(IDcolor)
+
+#get list of strains without NAs
+list_of_genotypes <- sort(na.omit(unique(raw_data$genotype)), decreasing = T)
+
+# Combine the lookup file
+data <- raw_data %>%
+  merge(lookup_color, by = c("cohort", "ID"), all = TRUE)%>%
+  rename( 
+    Dur_l  = `Duration_(s)_left_side`,
+    Dur_c  = `Duration_(s)_center`,
+    Dur_r  = `Duration_(s)_right_side`,
+    Dur_e  = `Duration_(s)_Empty`,
+    Dur_s1 = `Duration_(s)_St1`,
+    Dur_s2 = `Duration_(s)_St2`,
+    
+    TL_l  = `Tracklength_(cm)_left_side`,
+    TL_c  = `Tracklength_(cm)_center`,
+    TL_r  = `Tracklength_(cm)_right_side`,
+    TL_e  = `Tracklength_(cm)_Empty`,
+    TL_s1 = `Tracklength_(cm)_St1`,
+    TL_s2 = `Tracklength_(cm)_St2`
+  )%>%
+  mutate(Genotype = factor(genotype, levels = list_of_genotypes), 
+         Cohort = as.factor(cohort))
+
+# 1.2 EXPERIMENTAL SETTINGS
+#how many cohorts?
+list_of_cohorts <- unique(data$cohort)
+number_of_cohorts <- length(list_of_cohorts)
+
+genotype1= paste('n_mice', list_of_genotypes[1], sep='_')
+genotype2 = paste('n_mice', list_of_genotypes[2], sep='_')
+
+cohort_data <- data.frame('cohort'=numeric(0),
+                          'n_mice_total' = numeric(0), 
+                          genotype1 = numeric(0),
+                          genotype2 = numeric(0),
+                          'timepoint'= numeric(0))
+
+for(c in list_of_cohorts) {
+  data_cohort <- data %>%
+    filter(cohort == c,
+           phase== "hab",
+           no == "Sum")
+  
+  n_mice_total = nrow(data_cohort)
+  timepoint = 1
+  n_genotypes <- c()
+  for(st in list_of_genotypes){
+    data_cohort_genotype <- data_cohort %>%
+      filter(Genotype == st)
+    n_genotype = nrow(data_cohort_genotype)
+  
+  n_genotypes <- c(n_genotypes, n_genotype)
+  }
+  cohort_vec <- c(c, n_mice_total, n_genotypes, timepoint)
+  
+  cohort_data <- rbind(cohort_data, cohort_vec) 
+  
+}
+colnames(cohort_data) <- c("cohort", "n_total", "n_genotype1", "n_genotype2", "timepoint")
+
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+# UPDATE:
+# phases == Test types
+# phases are hab, S1, S2
+#
+# Notes
+
+# Test types are: hab = habituation, 
+# soc = sociability (introduction of stranger 1), 
+# nov = social novelty (introduction of stranger 2 in presence of stranger 1)
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+# Column name explanations:
+
+# No.: The interval number is assigned in chronological order
+# Date: Actual date of the end time of the interval in the format day.month.year
+# Time: Time of the day when the interval ended.
+# Avg. velocity (cm/s): Average speed, measured in the whole arena 
+# Track length (cm): Total length of the track, measured in the whole arena
+# Activity (%): Amount of time in which the animal's movement speed exceeded the Activity threshold
+# (user defined on the Configuration − Activity tab)
+# Ambulations: Total count of accelerations from zero to a speed, defined as Ambulation threshold
+# (user defined on the Configuration − Activity tab)
+# ZC: Total count of Zone crossings (user defined on the Configuration − Activity tab)
+# RZC: Total count of Rated zone crossings (user defined on the Configuration − Activity tab)
+# Wall dist. (cm): Distance of the animal's body point to the nearest wall, averaged over all video frames
+# (the wall is user defined on the Configuration − Activity tab) NOT USED FOR THIS TEST!
+# For Velocity classes:
+# vc1 to vc10: Time the animal spent moving with a speed according to a Velocity class
+# (user defined on the Configuration − Activity tab) NOT USED FOR THIS TEST!
+# For each zone:
+# Duration (s): of stay Total time the animal's reference point (user defined on the Configuration − Zone
+# definition tab) stayed in a zone
+# Velocity (cm/s): Average speed, measured during the Duration of stay
+# Track length (cm): Total length of the track, measured in during the Duration of stay
+# Visits Total count of zone entries by the reference point
+# Headbobs: Total count of the specific behavior (user defined on the Configuration − Behavior
+# tab) during the Duration of stay NOT USED FOR THIS TEST!
+# Tailmoves: Total count of the specific behavior (user defined on the Configuration − Behavior
+# tab) during the Duration of stay NOT USED FOR THIS TEST!
+# Headstretches: Total count of the specific behavior (user defined on the Configuration − Behavior
+# tab) during the Duration of stay NOT USED FOR THIS TEST!
+# Freezings: Total count of the specific behavior (user defined on the Configuration − Behavior
+# tab) during the Duration of stay NOT USED FOR THIS TEST!
+# Activity (%): Amount of active time in the zone during the Duration of interval
+# Ambulations: Total count of Ambulations in the zone during Duration of interval
+# Visit latency: Elapsed time to the zone entry since the saving interval started
+# 
+# --The classical parameter is a 
+# Discrimination Ratio= (Time spent at Novel animal (Stranger2) [TN] - Time spent at Familiar animal (Stranger 1) [TF])/(TN + TF);
+# but other parameters such as 
+# Exploration time: %T= (TN or TF/(TN +TF)) x100 and 
+# Frequency of visits: total number of visit to the other animals , can also be interesting to evaluate. 
+# These parameters can be calculated for the sociability phase and preference for social novelty phase. 
+# The parameter "Track length” was extracted in order to control for locomotion bias in this motoric task
+# 
+# The parameters assessed manually are number of sniffs at wire cages, the number of feces and the number of urine.    
+```
+
+### Experimental conditions
+
+1 cohort of mice:  
+* Cohort 1: $n$ = `r cohort_data$n_total[1]` (`r cohort_data$n_genotype1[1]` `r list_of_genotypes[1]` + `r cohort_data$n_genotype2[1]` `r list_of_genotypes[2]`)  
+   
+Time point: `r cohort_data$timepoint[1]`  
+Genotype: `r list_of_genotypes`   
+Experimenter:    
+
+```{r data_dur_inter_3ch}
+# Prepare the data for duration of interaction analysis
+
+#--------------------------DURATION OF INTERACTION----------------------------#
+
+# SOCIAL PREFERENCE DATA-------------------------------------------
+
+# Method 1, where the duration is the time spent in the st1 or st2 zones,
+# which are different than the left and right areas.
+# Social preference: st1 zone - unfamiliar, st2 zone - empty
+# Social recognition: st1 zone - familiar, st2 zone - unfamiliar
+
+# Extract the social preference test data by filtering "soc"
+# rename st1_dur as unfamiliar
+# rename st2_dur as empty
+
+
+soc_dur <- data %>%
+  filter(phase == "soc") %>%
+  #add 2 columns empty and unfamiliar, which are copies of the columns Dur_e and Dur_s1 
+  mutate(empty = Dur_e, unfamiliar = Dur_s1) %>%
+  #dplyr::select(no, cohort, ID, phase, strain, empty, unfamiliar, IDcolor, Strain, Cohort) %>%
+  #convert this columns to long-format
+  gather(grid, dur, empty, unfamiliar)
+# Exclude animals
+# exclude animals with NA values for duration in either empty or unfamiliar zones
+excluded_animals_socdur <- soc_dur[is.na(soc_dur$dur) | is.na(soc_dur$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+soc_dur <- soc_dur[!is.na(soc_dur$dur) & !is.na(soc_dur$Genotype),] #this only excludes the NAs, but not all data of animals with NAs
+
+
+# Method 2
+# Choose duration in the left or right area based on where the st1 was placed
+# this is different than the soc_dur, where the duration for each zone
+# ST1 or ST2 was selected
+soc_dur2 <- data %>%
+  filter(phase == "soc") #%>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_l, Dur_r, IDcolor, side_st1, Strain)
+# Exclude animals
+# exclude animals with NA values for st1_side info and with NA values in left or right areas
+excluded_animals_socdur2 <- soc_dur2[is.na(soc_dur2$side_st1) | is.na(soc_dur2$Dur_l) | is.na(soc_dur2$Dur_r) | is.na(soc_dur2$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by( cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+soc_dur2 <- soc_dur2[!is.na(soc_dur2$side_st1) & !is.na(soc_dur2$Dur_l) & !is.na(soc_dur2$Dur_r) & !is.na(soc_dur2$Genotype),] 
+
+# Select duration values based on which side the st1 was placed:
+# if st1 was placed on the right side 'r', then the duration of unfamiliar is r_dur and duration of empty is l_dur
+# and vice versa
+for (i in 1:nrow(soc_dur2)) {
+  if (soc_dur2$side_st1[i] == "r") {
+    soc_dur2$unfamiliar[i] = soc_dur2$Dur_r[i]
+    soc_dur2$empty[i] = soc_dur2$Dur_l[i]}
+  if (soc_dur2$side_st1[i] == "l") {
+   soc_dur2$unfamiliar[i] = soc_dur2$Dur_l[i]
+   soc_dur2$empty[i] = soc_dur2$Dur_r[i]}
+}
+#convert to long format
+soc_dur2 <- soc_dur2 %>%
+  gather(grid, dur, unfamiliar, empty)
+
+
+# SOCIAL RECOGNITION DATA -------------------------------------------
+
+# Method 1, where the duration is the time spent in the st1 or st2 zones,
+# which are different than the left and right areas.
+# Social preference: st1 zone - unfamiliar, st2 zone - empty
+# Social recognition: st1 zone - familiar, st2 zone - unfamiliar
+
+# Extract the social recognition test data by filtering "rec"
+# rename st1_dur as familiar
+# rename st2_dur as unfamiliar
+rec_dur <- data %>%
+  filter(phase == "nov") %>%
+  mutate(familiar = Dur_s1, unfamiliar = Dur_s2) %>%
+  #dplyr::select(no, cohort, ID, phase, strain, familiar, unfamiliar, IDcolor, Strain) %>%
+  gather(grid, dur, familiar, unfamiliar)
+# Exclude animals
+# exclude animals with NA values for duration in either empty or unfamiliar zones
+excluded_animals_recdur <- rec_dur[is.na(rec_dur$dur) | is.na(rec_dur$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+rec_dur <- rec_dur[!is.na(rec_dur$dur) & !is.na(rec_dur$Genotype),]
+
+
+# Method 2
+# Choose duration in the left or right area based on where the st1 was placed
+# this is different than the soc_dur, where the duration for each zone
+# ST1 or ST2 was selected
+rec_dur2 <- data %>%
+  filter(phase == "nov") #%>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_l,Dur_r, IDcolor, side_st1, Strain)
+# Exclude animals
+# exclude animals with NA values for st1_side info and with NA values in left or right areas
+excluded_animals_recdur2 <- rec_dur2[is.na(rec_dur2$side_st1) | is.na(rec_dur2$Dur_l) | is.na(rec_dur2$Dur_r) | is.na(rec_dur2$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+rec_dur2 <- rec_dur2[!is.na(rec_dur2$side_st1) & !is.na(rec_dur2$Dur_l) & !is.na(rec_dur2$Dur_r) & !is.na(rec_dur2$Genotype),] 
+
+# Select duration values based on which side the st1 was placed:
+# if st1 was placed on the right side 'r', then the duration of familiar is r_dur and unfamilair is l_dur
+# and vice versa
+for (i in 1:nrow(rec_dur2)) {
+  if (rec_dur2$side_st1[i] == "r") {
+    rec_dur2$familiar[i] = rec_dur2$Dur_r[i]
+    rec_dur2$unfamiliar[i] = rec_dur2$Dur_l[i]}
+  if (rec_dur2$side_st1[i] == "l") {
+   rec_dur2$familiar[i] = rec_dur2$Dur_l[i]
+   rec_dur2$unfamiliar [i] = rec_dur2$Dur_r[i]}
+}
+#convert to long format
+rec_dur2 <- rec_dur2 %>%
+  gather(grid, dur, unfamiliar, familiar)
+
+```
+
+
+
+```{r data_DR}
+# Prepare the data for discrimination ratio analysis 
+
+#--------------------------10MIN DISCRIMINATION RATIO----------------------------#
+
+# SOCIAL PREFERENCE DATA ---------------------------------------------
+
+# Method 1, where the duration is the time spent in the st1 or st2 zones,
+# which are different than the left and right areas.
+# Social preference: st1 zone - unfamiliar, st2 zone - empty
+# Social recognition: st1 zone - familiar, st2 zone - unfamiliar
+
+# Extract the social recognition test data by filtering "rec"
+soc_DR <- data %>%
+  filter(phase == "soc")# %>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_s1, Dur_e, IDcolor, Strain)
+# Exclude animals
+# exclude animals with NA values for duration in either empty or unfamiliar zones
+excluded_animals_socDR <- soc_DR[is.na(soc_DR$Dur_e) | is.na(soc_DR$Dur_e) | is.na(soc_DR$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+soc_DR <- soc_DR[!is.na(soc_DR$Dur_s1) & !is.na(soc_DR$Dur_e) & !is.na(soc_DR$Genotype),] 
+
+# Calculate DR 
+for (i in 1:nrow(soc_DR)) {
+  soc_DR$DR[i] = (soc_DR$Dur_s1[i] - soc_DR$Dur_e[i])/(soc_DR$Dur_s1[i] + soc_DR$Dur_e[i])
+}
+
+# Method 2
+# Choose duration in the left or right area based on where the st1 was placed
+# this is different than the soc_dur, where the duration for each zone
+# ST1 or ST2 was selected# SOCIAL PREFERENCE DATA
+
+# Extract the social preference test data by filtering "soc"
+# rename st1_dur as unfamiliar
+# rename st2_dur as empty
+soc_DR2 <- data %>%
+  filter(phase == "soc") #%>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_l, Dur_r, IDcolor, side_st1, Strain)
+# Exclude animals
+# exclude animals with NA values for st1_side info and with NA values in left or right areas
+excluded_animals_socDR2 <- soc_DR2[is.na(soc_DR2$side_st1) | is.na(soc_DR2$Dur_l) | is.na(soc_DR2$Dur_r) | is.na(soc_DR2$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+soc_DR2 <- soc_DR2[!is.na(soc_DR2$side_st1) & !is.na(soc_DR2$Dur_l) & !is.na(soc_DR2$Dur_r) & !is.na(soc_DR2$Genotype),]
+
+# Calculate DR values based on which side the st1 was placed:
+# if st1 was placed on the right side 'r', then the DR is (r_dur - l_dur)/sum
+# and vice versa
+for (i in 1:nrow(soc_DR2)) {
+  if (soc_DR2$side_st1[i] == "r") {
+    soc_DR2$DR[i] = (soc_DR2$Dur_r[i] - soc_DR2$Dur_l[i])/(soc_DR2$Dur_r[i] + soc_DR2$Dur_l[i])}
+  if (soc_DR2$side_st1[i] == "l") {
+    soc_DR2$DR[i] = (soc_DR2$Dur_l[i] - soc_DR2$Dur_r[i])/(soc_DR2$Dur_r[i] + soc_DR2$Dur_l[i])}
+}
+  
+
+# SOCIAL RECOGNITION DATA ---------------------------------------------
+
+# Method 1, where the duration is the time spent in the st1 or st2 zones,
+# which are different than the left and right areas.
+# Social preference: st1 zone - unfamiliar, st2 zone - empty
+# Social recognition: st1 zone - familiar, st2 zone - unfamiliar
+
+# Extract the social recognition test data by filtering "rec"
+rec_DR <- data %>%
+  filter(phase == "nov") #%>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_s1, Dur_s2, IDcolor, Strain)
+# Exclude animals
+# exclude animals with NA values for duration in either empty or unfamiliar zones
+excluded_animals_recDR <- rec_DR[is.na(rec_DR$Dur_s1) | is.na(rec_DR$Dur_s2) | is.na(rec_DR$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+rec_DR <- rec_DR[!is.na(rec_DR$Dur_s1) & !is.na(rec_DR$Dur_s2) & !is.na(rec_DR$Genotype),] 
+
+# Calculate DR 
+for (i in 1:nrow(rec_DR)) {
+  rec_DR$DR[i] = (rec_DR$Dur_s2[i] - rec_DR$Dur_s1[i])/(rec_DR$Dur_s1[i] + rec_DR$Dur_s2[i])
+}
+
+
+# Method 2
+# Choose duration in the left or right area based on where the st1 was placed
+# this is different than the soc_dur, where the duration for each zone
+# ST1 or ST2 was selected
+
+# Extract the social recognition test data by filtering "rec"
+# rename st1_dur as familiar
+# rename st2_dur as unfamiliar
+rec_DR2 <- data %>%
+  filter(phase == "nov") #%>%
+  #dplyr::select(no, cohort, ID, phase, strain, Dur_l, Dur_r, IDcolor, side_st1, Strain)
+# Exclude animals
+# exclude animals with NA values for st1_side info and with NA values in left or right areas
+excluded_animals_recDR2 <- rec_DR2[is.na(rec_DR2$side_st1) | is.na(rec_DR2$Dur_l) | is.na(rec_DR2$Dur_r) | is.na(rec_DR2$Genotype),] %>%
+  filter(no=="Sum") %>%
+  group_by(cohort, phase, Genotype, ID)
+# update data --> this data will only be used for analysis of this parameter
+rec_DR2 <- rec_DR2[!is.na(rec_DR2$side_st1) & !is.na(rec_DR2$Dur_l) & !is.na(rec_DR2$Dur_r) & !is.na(rec_DR2$Genotype),]
+
+# Calculate DR values based on which side the st1 was placed:
+# if st1 was placed on the right side 'r', then the DR is (l_dur - r_dur)/sum
+# and vice versa
+for (i in 1:nrow(rec_DR2)) {
+  if (rec_DR2$side_st1[i] == "r") {
+    rec_DR2$DR[i] = (rec_DR2$Dur_l[i] - rec_DR2$Dur_r[i])/(rec_DR2$Dur_r[i] + rec_DR2$Dur_l[i])}
+  if (rec_DR2$side_st1[i] == "l") {
+    rec_DR2$DR[i] = (rec_DR2$Dur_r[i] - rec_DR2$Dur_l[i])/(rec_DR2$Dur_r[i] + rec_DR2$Dur_l[i])}
+}
+
+
+#--------------------------5MIN BINNED DISCRIMINATION RATIO----------------------------#
+
+# Method 2
+
+soc_DR2_5min <- soc_DR2 %>%
+  filter(no!="Sum") %>%
+  mutate(bin = case_when(
+    no %in% 1:5 ~ "1-5 min",
+    no %in% 5:10 ~ "6-10 min",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(cohort,Cohort, ID, phase, Genotype, side_st1, bin) %>%
+  summarize(l_dur_5min = sum(Dur_l), r_dur_5min = sum(Dur_r))
+
+
+# Here the colum $DR_5min is created AND filled in one step. This will raise the warning: Unknown or uninitialised column: `DR_5min`. But it can be ignored.
+for (i in 1:nrow(soc_DR2_5min)) {
+  if (soc_DR2_5min$side_st1[i] == "r") {
+    soc_DR2_5min$DR_5min[i] = (soc_DR2_5min$r_dur_5min[i] - soc_DR2_5min$l_dur_5min[i])/(soc_DR2_5min$r_dur_5min[i] + soc_DR2_5min$l_dur_5min[i])}
+  if (soc_DR2_5min$side_st1[i] == "l") {
+    soc_DR2_5min$DR_5min[i] = (soc_DR2_5min$l_dur_5min[i] - soc_DR2_5min$r_dur_5min[i])/(soc_DR2_5min$r_dur_5min[i] + soc_DR2_5min$l_dur_5min[i])}
+}
+
+
+rec_DR2_5min <- rec_DR2 %>%
+  filter(no!="Sum") %>%
+  mutate(bin = case_when(
+    no %in% 1:5 ~ "1-5 min",
+    no %in% 5:10 ~ "6-10 min",
+    TRUE ~ NA_character_
+  )) %>%
+  group_by(cohort,Cohort, ID, phase, Genotype, side_st1, bin)%>%
+  summarize(l_dur_5min = sum(Dur_l), r_dur_5min = sum(Dur_r))
+for (i in 1:nrow(rec_DR2_5min)) {
+  if (rec_DR2_5min$side_st1[i] == "r") {
+    rec_DR2_5min$DR_5min[i] = (rec_DR2_5min$l_dur_5min[i] - rec_DR2_5min$r_dur_5min[i])/(rec_DR2_5min$r_dur_5min[i] + rec_DR2_5min$l_dur_5min[i])}
+  if (rec_DR2_5min$side_st1[i] == "l") {
+    rec_DR2_5min$DR_5min[i] = (rec_DR2_5min$r_dur_5min[i] - rec_DR2_5min$l_dur_5min[i])/(rec_DR2_5min$r_dur_5min[i] + rec_DR2_5min$l_dur_5min[i])}
+}
+
+
+```
+
+
+```{r hab_data}
+# Prepare habituation data
+hab <- data %>%
+  filter(phase=="hab")%>%
+  #select and unselect columns
+  dplyr::select(no, cohort, ID, phase, Genotype, contains("Dur"), -Dur_s1, -Dur_s2, -Dur_e, Cohort) %>%
+#  dplyr::select(no, cohort, ID, phase, Genotype, Sex, contains("Dur"), -Dur_s1, -Dur_s2, -Dur_e, Cohort) %>%
+  #convert into long-format
+  gather(area, dur, Dur_l, Dur_c, Dur_r)
+
+```
+
+### Excluded animals
+
+```{r excluded_animals}
+
+# summary of excluded animals, mostly habituation data are excluded
+excluded_summary <- excluded_animals_socdur %>%
+  bind_rows(excluded_animals_recdur, excluded_animals_recDR, excluded_animals_socDR) %>%
+  group_by(cohort, phase, ID)%>%
+  summarize()
+
+excluded_summary2 <- excluded_animals_socdur2 %>%
+  bind_rows(excluded_animals_recdur2, excluded_animals_recDR2, excluded_animals_socDR2) %>%
+  group_by(cohort, phase, ID)%>%
+  summarize()
+
+#Note: The tables created above are both empty
+
+#Exclude animals from tables above in all relevant dataframes
+if(nrow(excluded_summary)>0){
+  #for each ID in excluded summary
+  for(i in 1:nrow(excluded_summary)){
+    #select the ID
+    idx=excluded_summary$ID[i]
+    #remove all data from this ID from
+    #rec_dur
+    rec_dur = rec_dur %>% filter(ID!=idx)
+    #rec_DR
+    rec_DR = rec_DR %>% filter(ID!=idx)
+    #soc_dur
+    soc_dur = soc_dur %>% filter(ID!=idx)
+    #soc_DR
+    soc_DR = soc_DR %>% filter(ID!=idx)
+  }
+}
+
+
+# The following table summarizes the number of animals used in analysis by project and test phase:
+# `r total`
+```
+The following animals were excluded from analysis, because they either lacked information about which side the unfamiliar mouse was placed on, or lacked strain/genotype info, or had NA values for duration:  
+For analysis by zones:  
+`r excluded_summary`  
+For analysis by chambers:  
+`r excluded_summary2`
+
+
+\newpage
+
+### Results
+
+```{r, echo=FALSE}
+# here, a function is created that should perform wilcoxon test to test for significant differences between strains, between strains per cohort and between cohorts per strain. Furthermore, the function creates a table with the columns info, test an sign. The arguments to call the function are DF=data, parameter=variable of interest, info_text=some informational text
+
+make_stats <- function(DF, parameter, info_text) {
+  
+  #create a tibble called stats
+  stats = tibble()
+  
+  #rename the variable of interest (parameter) with param and save this dataframe into anew variable called stat_data
+  stat_data <- DF %>%
+  rename(param = parameter)
+
+  # Between strains
+  #perform the wilcox_test and tidy the output into a table/tibble
+  st = tidy(wilcox.test(param ~ Genotype, stat_data, paired = FALSE)) %>%
+    mutate(method = "Wilcoxon rank sum",
+         info = info_text,
+         test = "between Genotypes for both cohorts",
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+
+  # Between cohorts
+  #st = tidy(wilcox.test(mean_lat ~ cohort, stat_data, paired = TRUE)) %>%
+  #  mutate(method = "Wilcoxon",
+  #         info = info_text,
+  #         test = "between cohorts for both strains",
+  #         sign=ifelse(p.value < 0.05, "*", ""))
+  #stats = bind_rows(stats, st)
+
+
+  #between strains per cohort
+  #loop over cohorts (hard-coded for 2 cohorts)
+  for (k in 1:length(list_of_cohorts)) {
+      stat_data_k <- stat_data %>%
+        filter(Cohort == k) 
+      
+      st = tidy(wilcox.test(param ~ Genotype, stat_data_k, paired = FALSE)) %>%
+        mutate(method = "Wilcoxon rank sum",
+               info = info_text,
+               test = paste("between Genotypes for cohort", k),
+               sign=ifelse(p.value < 0.05, "*", ""))
+      stats = bind_rows(stats, st)
+      }
+  
+  
+  #between cohort per strain
+  #loop over strains (hard-coded for 2 strains)
+  for (k in 1:length(list_of_genotypes)) {
+      stat_data_s <- stat_data %>%
+        filter(Genotype == list_of_genotypes[k])
+      st = tidy(wilcox.test(param ~ Cohort, stat_data_s), paired = TRUE) %>%
+        mutate(method = "Wilcoxon signed rank",
+               info = info_text,
+               test = paste("between cohorts for", list_of_genotypes[k]),
+               sign=ifelse(p.value < 0.05, "*", ""))
+      stats = bind_rows(stats, st)
+}
+return(stats)
+}
+
+```
+
+#### Habituation phase
+
+##### Cohort 1
+
+```{r PTEN_hab_c1, fig.width = 9, fig.height = 10}
+
+#create a vector with zones and corresponding names to use the zones as labels in the plot
+areas <- c("Left", "Center", "Right")
+names(areas) <- c("Dur_l", "Dur_c", "Dur_r")
+
+#create a plot object, which does not only contain the plot but also the data and meta-information
+PTEN_hab_c1 <- hab %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  #convert the columns area, strain and cohort into factors with levels corresponding to names(areas), list_of_strains and list_of_cohorts, such that the order will be maintained.
+  mutate(area = factor(area, levels = c("Dur_l", "Dur_c", "Dur_r")),
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes)),
+         Cohort = factor(cohort, levels =c(list_of_cohorts))#,
+         #Strain = factor(Strain, levels = c(list_of_strains))
+         ) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = Genotype, y = dur, color = Genotype, label="")) +
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +
+  #add color by strain
+  scale_colour_manual(values = color_strain) +
+  #add ponits shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = Cohort), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 5) +
+  #remove filling (lenght of values needs to be equal to number of cohorts)
+  scale_shape_manual(values = c(1,2)) +
+  #add a grid/columns by the factors occuring in area and label them according to 'areas'
+  facet_grid(.~area, labeller = labeller(area = areas)) +
+  #ids as label
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  #axis title
+  labs(x="", 
+       y = "Time spent (s)",  
+       title = "Habituation phase cohort 1") +
+  #add a theme
+  theme_pubr() + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+PTEN_hab_c1
+
+```
+
+__Figure 1.__ Cohort 1: Time spent in the 3 chambers (left, center and right) during the habituation phase.
+
+\newpage
+
+__Statistics for Figure 1__
+
+```{r hab_PTEN_stats_c1}
+
+#create a character vector
+areas = c("Dur_l", "Dur_c", "Dur_r")
+
+#create a tibble to collect all stats
+stats = tibble()
+
+hab_c1 = hab %>% filter(cohort==1)
+
+#iterate for every strain (hard-coded, more general would be: for(i in 1:length(list_of_strain)))
+for (i in 1:2) {
+  stat_data <- hab_c1 %>%
+      filter(no=="Sum", Genotype==list_of_genotypes[i])
+  #perform kruskal test duration ~ area
+  st = tidy(kruskal.test(stat_data$dur, stat_data$area)) %>%
+    #format the output table, add some columns (method,test,info,sign), remove parameter
+    mutate(method = "Kruskal",
+         test = "habituation",
+         info = paste("within for", list_of_genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", "")) %>%
+    dplyr::select(-parameter)
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#iterate over areas (hard-coded) and perform wilcox test dur ~ strain
+for (i in 1:3){
+  stat_data <- hab_c1 %>%
+    filter(no=="Sum", area == areas[i])
+  st = tidy(wilcox.test(dur ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+    mutate(method = "Wilcoxon rank sum",
+         test = "habituation",
+         info = paste("b/n genotypes for", if (areas[i]=="Dur_l") {"left"} else if (areas[i]=="Dur_c") {"center"} else "right", "chamber"),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)%>%
+    dplyr::select(-alternative)
+}
+
+#post-hoc test for strain 1 ( pairwise wilcox test dur ~ area without p-value adjusting)
+stat_data <- hab_c1 %>%
+  filter(no=="Sum", Genotype == list_of_genotypes[1])
+posthoc1_c1 <- pairwise.wilcox.test(stat_data$dur, stat_data$area, p.adjust.method = "none")
+posthoc1_c1 <- as_tibble(posthoc1_c1$p.value, rownames = NA)
+
+#post-hoc test for strain 2 ( pairwise wilcox test dur ~ area without p-value adjusting)
+stat_data <- hab_c1 %>%
+  filter(no=="Sum", Genotype == list_of_genotypes[2])
+posthoc2_c1 <- pairwise.wilcox.test(stat_data$dur, stat_data$area, p.adjust.method = "none")
+posthoc2_c1 <- as_tibble(posthoc2_c1$p.value, rownames = NA)
+
+#Note: the posthoc test will be displayed at the end of the document
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+From R Documentation: Wilcoxon Rank Sum and Signed Rank Tests: _Note that in the two-sample case the estimator for the difference in location parameters does not estimate the difference in medians (a common misconception) but rather the median of the difference between a sample from x and a sample from y._
+
+\newpage
+#### Duration of interaction
+
+##### Cohort 1
+
+```{r PTEN_dur_c1, fig.width = 9, fig.height = 10}
+
+#PTEN cohort 1------------------------------------------------------------------
+
+# Method 1, where the duration is the time spent in the st1 or st2 zones,
+# which are different than the left and right areas.
+# Social preference: st1 zone - unfamiliar, st2 zone - empty
+# Social recognition: st1 zone - familiar, st2 zone - unfamiliar
+
+# Social preference 
+PTEN_soc_dur_c1 <- soc_dur %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(#strain = strain,
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes)),
+         cohort = factor(cohort, levels =c(list_of_cohorts))#,
+         #Strain = factor(Strain, levels = c(list_of_strains))
+         ) %>%
+  ggplot(aes(x = factor(grid), y = dur, color = Genotype, label="")) +
+  
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  #ids as label
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  facet_grid(.~Genotype) +
+  labs(x="", 
+       y = "Duration of interaction (s)", 
+       title = "Social preference") + 
+  theme_pubr() + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))+
+  scale_y_continuous(limits=c(0, 160))+
+  stat_n_text(y.pos = 5)
+
+# Social recognition
+PTEN_rec_dur_c1 <- rec_dur %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(#strain = strain,
+         #strain = factor(strain, levels = c(list_of_strains)),
+         cohort = factor(cohort, levels =c(list_of_cohorts))#,
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes))
+         ) %>%
+  ggplot(aes(x = factor(grid), y = dur, color = Genotype, label="")) +
+ 
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  scale_shape_manual(values = c(1,2)) +
+  facet_grid(.~Genotype) +
+  labs(x="",
+       y = "Duration of interaction (s)", 
+       title = "Social recognition") +
+  theme_pubr() + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))+
+  scale_y_continuous(limits=c(0, 165))+
+  stat_n_text(y.pos = 5)
+
+
+#arrange plots into a grid with automatic sublabels (A,B)
+PTEN_dur_c1 <- ggarrange(PTEN_soc_dur_c1, PTEN_rec_dur_c1, labels="AUTO", ncol=2, nrow=1, common.legend=T, legend = "bottom") %>%
+    annotate_figure(top = text_grob("ROSARIO_A46 project cohort 1 (duration in st1/st2 zones)", face = "bold", size = 14))
+
+
+#scharff_dur
+# Method 2, where the duration is the time spent in the left or right area 
+# based on where which side stranger 1 was placed in
+
+# Social preference 
+PTEN_soc_dur2_c1 <- soc_dur2 %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(#strain = strain,
+         #strain = factor(strain, levels = c(list_of_strains)),
+         cohort = factor(cohort, levels =c(list_of_cohorts))#,
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes))
+         ) %>%
+  ggplot(aes(x = factor(grid), y = dur, color = Genotype, label="")) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape =1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  facet_grid(.~Genotype) +
+  labs(x="", 
+       y = "Duration of interaction (s)", 
+       title = "Social preference") + 
+  theme_pubr() + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))+
+  scale_y_continuous(limits=c(0, 600))+
+  stat_n_text(y.pos = 5)
+
+# Social recognition
+PTEN_rec_dur2_c1 <- rec_dur2 %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(#strain = strain,
+         #strain = factor(strain, levels = c(list_of_strains)),
+         cohort = factor(cohort, levels =c(list_of_cohorts))#,
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes))
+         ) %>%
+  ggplot(aes(x = factor(grid), y = dur, color = Genotype, label="")) +
+  
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  facet_grid(.~Genotype) +
+  labs(x="",
+       y = "Duration of interaction (s)", 
+       title = "Social recognition") +
+  theme_pubr() + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  scale_y_continuous(limits=c(0, 600)) +
+  stat_n_text(y.pos = 5)
+
+
+#arrange plots into a grid with manual sublabels (C,D)
+PTEN_dur2_c1 <- ggarrange(PTEN_soc_dur2_c1, PTEN_rec_dur2_c1, labels=c("C","D"), ncol=2, nrow=1, common.legend=T, legend = "bottom") %>%
+    annotate_figure(top = text_grob("cohort 1 (duration in left/right chambers)", face = "bold", size = 14))
+
+
+#scharff_dur2
+#arrange the to combined plots in two rows without further sublabels
+PTEN_all_dur_c1 <- ggarrange(PTEN_dur_c1, PTEN_dur2_c1, ncol=1, nrow=2)
+
+PTEN_all_dur_c1
+
+```
+__Figure 2.__ Cohort 1: Duration of interaction during the social preference (A+C) and social recognition (B+D) tests.
+
+\newpage
+
+__Statistics for Figure 2.__
+```{r stats_PTEN_dur_c1}
+
+#--------------------------STATS FOR DURATION OF INTERACTION ----------------------------#
+
+#copy list of strains as strains
+genotypes = list_of_genotypes
+#create some character vectors
+grids_soc = c("empty", "unfamiliar")
+grids_rec = c("familiar", "unfamiliar")
+
+# FOR ZONES
+#create a tibble to collect all stats
+stats = tibble()
+
+soc_dur_c1 =soc_dur %>% filter(cohort==1)
+rec_dur_c1 =rec_dur %>% filter(cohort==1)
+
+#iterate over 2 levels (2 times)
+for (i in 1:2) {
+  stat_data <- soc_dur_c1 %>%
+    #select from vector 'strains' (created above) the index according to number of iteration and filter for that value/string in column strain 
+    filter(Genotype == genotypes[i]) 
+  #to run a paired test we need the same number of samples with grid = 'empty' as grid = 'unfamiliar'. For animal 62 this data is missing in phase soc.
+  #perform wilcoxon signed rank test (paired wilcox test)
+  st = tidy(wilcox.test(dur ~ grid, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social pref by zones",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  stat_data <- soc_dur_c1 %>%
+    ##select from vector 'grdi_soc' (created above) the index according to number of iteration and filter for that value/string in column grid
+    filter(grid == grids_soc[i])
+  #perform wilcox rank sum test (unpaired)
+  st = tidy(wilcox.test(dur ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  # unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+         test = "social pref by zones",
+         info = paste("b/n for", grids_soc[i] ),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  #same as above for rec_dur
+  
+  stat_data <- rec_dur_c1 %>%
+    filter(Genotype == genotypes[i])
+  st = tidy(wilcox.test(dur ~ grid, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social rec by zones",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  stat_data <- rec_dur_c1 %>%
+    filter(grid == grids_rec[i])
+  st = tidy(wilcox.test(dur ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  # unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+         test = "social rec by zones",
+         info = paste("b/n for", grids_rec[i] ),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+}
+
+# FOR CHAMBERS
+soc_dur2_c1 =soc_dur2 %>% filter(cohort==1)
+rec_dur2_c1 =rec_dur2 %>% filter(cohort==1)
+stats2 = tibble()
+for (i in 1:2) {
+  stat_data <- soc_dur2_c1 %>%
+    filter(Genotype == genotypes[i])
+  st = tidy(wilcox.test(dur ~ grid, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social pref by chambers",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+  
+  stat_data <- soc_dur2_c1 %>%
+    filter(grid == grids_soc[i])
+  st = tidy(wilcox.test(dur ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  # unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+         test = "social pref by chambers",
+         info = paste("b/n for", grids_soc[i] ),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+  
+  stat_data <- rec_dur2_c1 %>%
+    filter(Genotype == genotypes[i])
+  st = tidy(wilcox.test(dur ~ grid, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social rec by chambers",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+  
+  stat_data <- rec_dur2_c1 %>%
+    filter(grid == grids_rec[i])
+  st = tidy(wilcox.test(dur ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  # unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+         test = "social rec by chambers",
+         info = paste("b/n for", grids_rec[i] ),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+}
+
+scharff_statdur <- bind_rows(stats, stats2)%>%
+  dplyr::select(-alternative)
+scharff_statdur%>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+From R Documentation: Wilcoxon Rank Sum and Signed Rank Tests: _Note that in the two-sample case the estimator for the difference in location parameters does not estimate the difference in medians (a common misconception) but rather the median of the difference between a sample from x and a sample from y._
+
+\newpage
+
+#### Discrimination ratio or preference for the unfamiliar
+
+##### Cohort 1
+
+```{r PTEN_DR_c1, fig.width = 9, fig.height = 10}
+
+
+#PTEN cohort 1------------------------------------------------------------------
+
+# Method 1. By zones
+
+# Social preference 
+PTEN_soc_DR_c1 <- soc_DR %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(
+         cohort = factor(cohort, levels =c(list_of_cohorts))
+         ) %>%
+  #ggplot(aes(x = factor(genotype), y = DR, color = genotype)) +
+  ggplot(aes(x = Genotype, y = DR, color =Genotype)) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio", 
+       title = "Social preference", 
+       subtitle = "(preference for unfamiliar animal over empty grid)" ) + 
+  theme_pubr() +
+  #add a dashed horizontal line
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11)) +
+  stat_n_text(y.pos = -1)
+
+# Social recognition
+PTEN_rec_DR_c1 <- rec_DR %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(
+         cohort = factor(cohort, levels =c(list_of_cohorts))
+         ) %>%
+  #ggplot(aes(x = factor(genotype), y = DR, color = genotype)) +
+  ggplot(aes(x = Genotype, y = DR, color = Genotype)) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio", 
+       title = "Social recognition", 
+       subtitle = "(preference for unfamiliar animal over familiar animal)" ) + 
+  theme_pubr() +  
+  #add a dashed horizontal line
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11)) +
+  stat_n_text(y.pos = -1)
+
+
+PTEN_DR_c1 <- ggarrange(PTEN_soc_DR_c1, PTEN_rec_DR_c1, labels="AUTO", ncol=2, nrow=1, common.legend=T, legend = "bottom") %>%
+    annotate_figure(top = text_grob("ROSARIO_A46 cohort 1 (DR in st1/st2 zones)", face = "bold", size = 14))
+
+
+# Method 2. By chambers
+
+# Social preference 
+PTEN_soc_DR2_c1 <- soc_DR2 %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(
+         cohort = factor(cohort, levels =c(list_of_cohorts))
+         ) %>%
+  #ggplot(aes(x = factor(genotype), y = DR, color = genotype)) +
+  ggplot(aes(x = Genotype, y = DR, color = Genotype)) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio", 
+       title = "Social preference", 
+       subtitle = "(preference for unfamiliar animal over empty grid)" ) + 
+  theme_pubr() + 
+  #add a dashed horizontal line
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11)) +
+  stat_n_text(y.pos = -1)
+
+# Social recognition
+PTEN_rec_DR2_c1 <- rec_DR2 %>%
+  filter(no=="Sum",
+         cohort==1) %>%
+  mutate(
+         cohort = factor(cohort, levels =c(list_of_cohorts))
+         ) %>%
+  #ggplot(aes(x = factor(genotype), y = DR, color = genotype)) +
+  ggplot(aes(x = Genotype, y = DR, color = Genotype)) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), shape=1, size = 2) +
+  #scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio", 
+       title = "Social recognition", 
+       subtitle = "(preference for unfamiliar animal over familiar animal)" ) + 
+  theme_pubr() +  
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11)) +
+  stat_n_text(y.pos = -1)
+
+
+PTEN_DR2_c1 <- ggarrange(PTEN_soc_DR2_c1, PTEN_rec_DR2_c1, labels=c("C","D"), ncol=2, nrow=1, common.legend=T, legend = "bottom") %>%
+    annotate_figure(top = text_grob("cohort 1 (DR in left/right chambers)", face = "bold", size = 14))
+
+
+#scharff_DR
+#scharff_DR2
+
+PTEN_all_c1 <- ggarrange(PTEN_DR_c1, PTEN_DR2_c1, ncol=1, nrow=2)
+PTEN_all_c1
+
+```
+__Figure 3.__ Cohort 1: Discrimination ratio during the social preference (A+C) and social recognition (B+D) test phases. The dashed line represents chance level. 
+
+\newpage
+
+__Statistics for Figure 3.__
+```{r stats_PTEN_DR_c1}
+
+#--------------------------STATS FOR 10 MIN DR Cohort 1 ----------------------------#
+
+# FOR ZONES
+stats = tibble()
+
+stat_data <- soc_DR %>% filter(cohort==1)
+st = tidy(wilcox.test(DR ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+# unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+       test = "social pref by zones",
+       info = "b/n genotypes",
+       sign=ifelse(p.value < 0.05, "*", ""))
+stats = bind_rows(stats, st)
+
+
+stat_data <- rec_DR %>% filter(cohort==1)
+st = tidy(wilcox.test(DR ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+# unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+       test = "social rec by zones",
+       info = paste("b/n genotypes"),
+       sign=ifelse(p.value < 0.05, "*", ""))
+stats = bind_rows(stats, st)
+
+#iterate over strain and test against theoretical mean of 0
+for (i in 1:2){
+  stat_data <- soc_DR %>%
+    filter(cohort==1) %>% 
+    filter(Genotype==genotypes[i])
+  st = tidy(wilcox.test(stat_data$DR, mu = 0, conf.int=T)) %>%
+    mutate(method = "Wilcoxon rank sum",
+           test = "social pref by zones",
+           info = paste("compared to 0 for", genotypes[i]),
+           sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+
+  stat_data <- rec_DR %>%
+    filter(cohort==1) %>%
+    filter(Genotype==genotypes[i])
+  st = tidy(wilcox.test(stat_data$DR, mu = 0, conf.int=T)) %>%
+    mutate(method = "Wilcoxon signed rank",
+           test = "social rec by zones",
+           info = paste("compared to 0 for", genotypes[i]),
+           sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+}
+
+
+# FOR CHAMBERS
+stats2 = tibble()
+stat_data <- soc_DR2 %>% filter(cohort==1)
+st = tidy(wilcox.test(DR ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+# unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+       test = "social pref by chambers",
+       info = paste("b/n genotypes"),
+       sign=ifelse(p.value < 0.05, "*", ""))
+stats2 = bind_rows(stats2, st)
+
+stat_data <- rec_DR2 %>% filter(cohort==1) 
+st = tidy(wilcox.test(DR ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+# unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+       test = "social rec by chambers",
+       info = paste("b/n genotypes"),
+       sign=ifelse(p.value < 0.05, "*", ""))
+stats2 = bind_rows(stats2, st)
+
+#iterate over strain and test against theoretical mean of 0
+for (i in 1:2){
+  stat_data <- soc_DR2 %>%
+    filter(cohort==1) %>%
+    filter(Genotype==genotypes[i])
+  st = tidy(wilcox.test(stat_data$DR, mu = 0, conf.int=T)) %>%
+    mutate(method = "Wilcoxon signed rank",
+           test = "social pref by chambers",
+           info = paste("compared to 0 for", genotypes[i]),
+           sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+
+  stat_data <- rec_DR2 %>%
+    filter(cohort==1) %>%
+    filter(Genotype==genotypes[i])
+  st = tidy(wilcox.test(stat_data$DR, mu = 0, conf.int=T)) %>%
+    mutate(method = "Wilcoxon signed rank",
+           test = "social rec by chambers",
+           info = paste("compared to 0 for", genotypes[i]),
+           sign=ifelse(p.value < 0.05, "*", ""))
+  stats2 = bind_rows(stats2, st)
+}
+
+scharff_statDR <- bind_rows(stats, stats2)%>%
+  dplyr::select(-alternative)
+scharff_statDR %>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+From R Documentation: Wilcoxon Rank Sum and Signed Rank Tests: _Note that in the two-sample case the estimator for the difference in location parameters does not estimate the difference in medians (a common misconception) but rather the median of the difference between a sample from x and a sample from y._
+
+\newpage
+
+#### Discrimination ratio per 5-minutes bins
+
+##### Cohort 1
+
+```{r scharff_DR_5min_c1, fig.width = 9, fig.height = 4}
+
+#PTEN Cohorts 1------------------------------------------------------------------
+
+
+# Social preference 
+PTEN_soc_DR2_5min_c1 <- soc_DR2_5min %>%
+  mutate(
+         cohort = factor(cohort, levels =c(list_of_cohorts))
+         ) %>%
+  filter(cohort==1) %>% 
+  #ggplot(aes(x = factor(strain, levels = c("wt", "Tweet")), y = DR_5min, color = strain)) +
+  ggplot(aes(x = Genotype, y = DR_5min, color = Genotype)) +
+  geom_boxplot(outlier.shape = NULL) +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = Cohort), size = 2) +
+  stat_n_text(y.pos = -1) +
+  #add a grid/columns by 5 minute bins
+  facet_grid(~bin) +
+  scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio",  
+       title = "Social preference", 
+       subtitle = "(preference for unfamiliar animal over empty grid)" ) + 
+  theme_pubr() + 
+  #add a dashed horizontal line at y=0
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11))
+
+# Social recognition
+PTEN_rec_DR2_5min_c1 <- rec_DR2_5min %>%
+  mutate(#strain = factor(strain, levels = c(list_of_strains)),
+         cohort = factor(cohort, levels =c(list_of_cohorts)),
+         #Genotype = factor(Genotype, levels = c(list_of_genotypes))
+         ) %>%
+  filter(cohort==1) %>% 
+  #ggplot(aes(x = factor(strain, levels = c("wt", "Tweet")), y = DR_5min, color = strain)) +
+  ggplot(aes(x = Genotype, y = DR_5min, color = Genotype)) +
+  geom_boxplot() +
+  scale_colour_manual(values = color_strain) +
+  #geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = cohort), size = 2) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = Cohort), size = 2) +
+  stat_n_text(y.pos = -1) +
+  #add a grid/columns by 5 minute bins
+  facet_grid(~bin)+
+  scale_shape_manual(values = c(1,2)) +
+  labs(x="", 
+       y =  "Discrimination Ratio", 
+       title = "Social recognition", 
+       subtitle = "(preference for unfamiliar animal over familiar animal)" ) + 
+  theme_pubr() +  
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_y_continuous(limits=c(-1, 1)) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12), 
+        plot.subtitle = element_text(hjust = 0.5, size = 11))
+
+
+PTEN_DR2_5min_c1 <- ggarrange(PTEN_soc_DR2_5min_c1, PTEN_rec_DR2_5min_c1, labels="AUTO", ncol=2, nrow=1, common.legend=T, legend = "bottom") %>%
+    annotate_figure(top = text_grob("ROSARIO_A46 Cohort 1 (DR in left/right chambers)", face = "bold", size = 14))
+
+PTEN_DR2_5min_c1
+
+```
+
+__Figure 4.__ Cohort 1: Discrimination ratio shown by 5-minute bins during the social preference (A) and social recognition (B) test phases. The dashed line represents chance level.
+
+__Statistics for Figure 4.__
+
+```{r stats_PTEN_DR5min_c1}
+
+#--------------------------STATS FOR 5 MIN BIN DR Cohort 1 ----------------------------#
+
+bins <- c("1-5 min", "6-10 min")
+
+# FOR CHAMBERS ONLY
+stats = tibble()
+#iterate over strains and test for difference between bins within each strain
+for (i in 1:2) {
+  stat_data <- soc_DR2_5min %>%
+    filter(cohort==1) %>% 
+    filter(Genotype == genotypes[i])
+  st = tidy(wilcox.test(DR_5min ~ bin, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social pref by chambers",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  #iterate over bins and test for difference between strains within each bin
+  stat_data <- soc_DR2_5min %>%
+    filter(cohort==1) %>% 
+    filter(bin == bins[i])
+  st = tidy(wilcox.test(DR_5min ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  # unpaired because between strains
+  mutate(method = "Wilcoxon rank sum",
+         test = "social pref by chambers",
+         info = paste("b/n for", bins[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  #use index i from outer loop above to iterate over bins and inner loop to iterate over strains.
+  # Test for a difference to a theoretical mean of 0 for each strain in each 5 min bin
+  for (k in 1:2) {
+    stat_data <- soc_DR2_5min %>%
+      filter(cohort==1) %>% 
+      filter(bin==bins[i], Genotype==genotypes[k])
+    st = tidy(wilcox.test(stat_data$DR_5min, mu = 0, conf.int=T)) %>%
+      mutate(method = "Wilcoxon signed rank",
+             test = "social pref by chambers",
+             info = paste("compared to 0 for", genotypes[k], bins[i]),
+             sign=ifelse(p.value < 0.05, "*", ""))
+    stats = bind_rows(stats, st)
+    }
+
+  #Same as above but for rec_DR2_5min
+  
+  stat_data <- rec_DR2_5min %>%
+    filter(cohort==1) %>% 
+    filter(Genotype == genotypes[i])
+  st = tidy(wilcox.test(DR_5min ~ bin, stat_data, paired = TRUE, conf.int=T)) %>%
+  # paired because within strain
+  mutate(method = "Wilcoxon signed rank",
+         test = "social rec by chambers",
+         info = paste("within", genotypes[i]),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+  
+  stat_data <- rec_DR2_5min %>%
+    filter(cohort==1) %>% 
+    filter(bin == bins[i])
+  st = tidy(wilcox.test(DR_5min ~ Genotype, stat_data, paired = FALSE, conf.int=T)) %>%
+  mutate(method = "Wilcoxon rank sum",
+         test = "social rec by chambers",
+         info = paste("b/n for", bins[i] ),
+         sign=ifelse(p.value < 0.05, "*", ""))
+  stats = bind_rows(stats, st)
+
+ for (k in 1:2) {
+    stat_data <- rec_DR2_5min %>%
+      filter(cohort==1) %>% 
+      filter(bin==bins[i], Genotype==genotypes[k])
+    st = tidy(wilcox.test(stat_data$DR_5min, mu = 0, conf.int=T)) %>%
+      mutate(method = "Wilcoxon signed rank",
+             test = "social rec by chambers",
+             info = paste("compared to 0 for", genotypes[k], bins[i]),
+             sign=ifelse(p.value < 0.05, "*", ""))
+    stats = bind_rows(stats, st)
+    }
+
+}
+
+
+PTEN_statDR2_5min_c1<- stats %>%
+  dplyr::select(-alternative)
+PTEN_statDR2_5min_c1 %>%
+  kable(booktabs = T) %>%
+  kable_styling(latex_options = c("hold_position","scale_down") )
+
+```
+From R Documentation: Wilcoxon Rank Sum and Signed Rank Tests: _Note that in the two-sample case the estimator for the difference in location parameters does not estimate the difference in medians (a common misconception) but rather the median of the difference between a sample from x and a sample from y._
+
+
+\newpage
+
+******
+
+### Conclusion
+
+******
