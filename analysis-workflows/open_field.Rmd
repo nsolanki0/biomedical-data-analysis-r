@@ -1,0 +1,910 @@
+---
+title: "Open Field test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+    
+#output:
+#  pdf_document:
+#    fig_caption: yes
+#    number_sections: yes
+#    toc: yes
+#    df_print: kable
+#  html_document:
+#    df_print: kable
+#    toc: yes
+#    toc_float:
+#      collapsed: false
+#    number_sections: yes
+#    theme: cosmo
+#mainfont: palatino
+#geometry: "left=3cm,right=3cm,top=2cm,bottom=4cm"
+#header-includes:
+#    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+# Empty global environment
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticaly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+#library(ggsignif)
+library(rstatix)
+
+```
+
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file. 
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: OPEN FIELD (OF) analysis
+developed by: Narendra Solanki (NS)
+last update: 26.05.2025
+
+Viewer Software:
+This script takes the preprocessed data from the preprocessor_GENERAL.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+The script has the following parts:
+
+# LOAD DATA section:
+  - loads the preprocessed data and tidies it up into a polished "data" data frame
+  
+  - this section is always individualized for the specific project
+  depending on the differences in file names, etc.
+  
+  - first, MAKE SURE the current directory is up-to-date
+  and corresponds to the project folder, which has a data folder.
+  Adjust the file name and the script will automatically load the data from this folder.
+  
+  - NOTE1: 
+  this section also checks if the order of zones is the same for all animals.
+  However, it does not yet include section that solves if the order is inconsistent.
+
+# All the following analysis sections are general.
+
+
+-->
+
+
+## Open Field Analysis
+
+### Experimental conditions
+
+2 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Test\analysis\OF`  
+
+Preprocessed Data: 
+ 
+2 groups:  
+
+`cohort1_2025-05-12.xlsx`    
+`cohort2_2025-05-12.xlsx`   
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\6. Data from Behavioral Test\OF`    
+
+### Data Quality:  
+->All data can be used. 
+
+```{r OP_data_loading}
+
+# Empty global environment
+rm(list = ls())
+
+### 1.0 LOAD IN DATA ----------------------------------------------------------
+
+# Load data
+file_path <- "~/6. Data from Behavioral Tests/analysis/OF/"
+
+raw_data_file_c1 <- "cohort1_2025-05-12.xlsx"
+raw_data_file_c2 <- "cohort2_2025-05-12.xlsx"
+
+data_c1 <- read_excel(paste(file_path,raw_data_file_c1,sep=""))
+data_c2 <- read_excel(paste(file_path,raw_data_file_c2,sep=""))
+
+# combine all groups to create a single data frame 
+raw_data <- rbind(data_c1, data_c2)
+
+
+# Load lookup data files
+lookupfile <- choose.files()  
+
+# Read lookup data files
+lookup <- read_excel(paste(lookupfile,sep = ""))
+
+lookup <- lookup %>% 
+  mutate(animal_no = as.character(`Animal ID`),
+         cohort = as.character(cohort)) 
+
+# combine exp data with lookup data
+data_of <- full_join(raw_data,lookup , by= "animal_no")
+
+data_of$cohort <- as.numeric(data_of$cohort)
+
+# need genotype to be factor for later stat analysis
+data_of <- data_of %>% mutate(group = as.factor(Group)) 
+
+
+# Combine the lookup file
+data <- data_of %>%
+  # Select relevant columns
+  dplyr::select(no, animal_no, cohort, group, Sex, contains("Tracklength"), contains("Track length"), contains("Track_length"), contains("Visits"), contains("Visit"), contains("Duration")) 
+
+data <- data %>%
+  mutate(perc_time_center = as.numeric(`Duration (s) center`)/(as.numeric(`Duration (s) arena`) + as.numeric(`Duration (s) center`)) * 100)
+
+data <- data %>%
+  mutate(group = factor(group),
+         cohort = factor(cohort),
+         gender = factor(Sex)) %>%
+  mutate_at(c(6:14),as.numeric)
+
+#lapply(data,class)
+
+```
+
+\newpage
+
+### Analysis of the data
+
+#### Arena track length
+
+```{r OP_track_length, fig.align = "left", fig.width=9, fig.height=4}
+
+### 3.0 ANALYSIS OF THE DATA --------------------------------------------------
+
+### 3.1 DISTANCE TRAVELLED ----------------------------------------------------
+
+# stats fig1a
+stat_1a <- data %>%
+  filter(no == "Sum") %>%
+  wilcox_test(`Track length (cm)` ~ group,exact=FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig1a
+pl_1a <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Track length (cm)`, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Distance traveled (10m)", x="", y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_1a, label = "p.signif", tip.length = 0.02)
+
+#pl_1a
+
+################################# 
+# stats fig1b
+stat_1b <- data %>%
+  filter(no == "Sum") %>%
+  group_by(group) %>%
+  wilcox_test(`Track length (cm)` ~ gender,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig1b
+pl_1b <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Track length (cm)`, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +    
+  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Distance traveled (10m)", x="", y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 3500, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_1b, label = "p.signif", tip.length = 0.02)
+
+#pl_1b
+
+#################################  
+# arrange plots into a grid with automatic sublabels (A,B)
+fig1 <- ggarrange(pl_1a, pl_1b, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+fig1
+
+```
+
+__Figure 1.__ Distance traveled (cm) between groups (A) and between gender within group (B).
+
+__Statistics for Figure 1 A (between groups)__
+
+```{r stat_1a, echo=F}
+
+stat_1a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%  
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 B (between gender)__
+
+```{r stat_1b, echo=F}
+
+stat_1b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Duration in zones
+
+```{r OP_dur_peri, fig.align = "left", fig.width=9, fig.height=9}
+
+### 3.2 DURATION IN THE ZONES -------------------------------------------------
+
+### 3.2.1 Duration in the periphery
+
+# stats fig2a
+stat_2a <- data %>%
+  filter(no == "Sum") %>%
+  wilcox_test(`Duration (s) arena` ~ group,exact=FALSE) %>%
+  add_significance("p") #%>%
+#  add_xy_position(x = "group") 
+
+stat_2a <- stat_2a %>%
+  mutate(y.position = 600.2)
+  
+# plot fig2a
+pl_2a <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Duration (s) arena`, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+  coord_cartesian(ylim=c(599,601)) +
+  labs(title="Time spent in the periphery", x="", y = "Time (s)") +  
+  theme_classic() +
+  theme_pubr() +
+#  stat_n_text() +
+  stat_n_text(y.pos = 599) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2a, label = "p.signif", tip.length = 0.02)
+
+# pl_2a
+  
+#################################  
+  
+# stats fig2b
+stat_2b <- data %>%
+  filter(no == "Sum") %>%
+  group_by(group) %>%
+  kruskal_test(`Duration (s) arena`~ gender) %>%
+  add_significance("p") #%>%
+#  add_xy_position(x = "group")
+
+# stat_2b <- stat_2b %>%
+#   mutate(group1 = "f",
+#          group2 = "m",
+#          y.position = max(data$`Duration (s) arena`, na.rm = TRUE) + 10)
+
+stat_2b <- stat_2b %>%
+  mutate(#group1 = "f",
+         #group2 = "m",
+         y.position = c(600.2, 600.2)) 
+  
+# plot fig2b
+pl_2b <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Duration (s) arena`, color = gender)) + 
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +    
+  coord_cartesian(ylim=c(599,601)) + 
+  labs(title="Time spent in the periphery", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() + 
+#  stat_n_text() +
+  stat_n_text(y.pos = 599) + 
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=599, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +    
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2b, label = "p.signif", tip.length = 0.02)
+
+# pl_2b 
+
+#################################   
+  
+### 3.2.2 Duration in the center
+  
+# stats fig2c
+stat_2c <- data %>%
+    filter(no == "Sum") %>%
+    wilcox_test(`Duration (s) center` ~ group,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group") 
+  
+# plot fig1c
+pl_2c <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Duration (s) center`, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +
+#  coord_cartesian(ylim=c(0,175)) +
+  labs(title="Time spent in the center", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2c, label = "p.signif", tip.length = 0.02)
+
+# pl_2c
+
+#################################   
+
+# stats fig2d
+stat_2d <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`Duration (s) center` ~ gender,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# stat_2d <- stat_2d %>%
+#   mutate(group1 = "f",
+#          group2 = "m",
+#          y.position = c(109, 167)) 
+
+# plot fig2d
+pl_2d <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Duration (s) center`, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +      
+#  coord_cartesian(ylim=c(0,175)) +  
+  labs(title="Time spent in the center", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 5, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2d, label = "p.signif", tip.length = 0.02)
+ 
+# pl_2d
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig2 <- ggarrange(pl_2a, pl_2b, pl_2c, pl_2d, labels="AUTO", ncol=2, nrow=2, common.legend=FALSE, legend = "bottom") 
+
+fig2
+
+```
+
+__Figure 2.__ Time spent in the periphery between groups (A) and between gender within group (B), and in the center between groups (C) and between gender within group (D). 
+
+\newpage
+
+__Statistics for Figure 2 A (between groups)__
+
+```{r OP_dur_peri_stat, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2a %>%
+  dplyr::select(-y.position) %>%  
+#  dplyr::select(-p.adj,-y.position,-groups,-xmin,-xmax) %>%  
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B (between gender)__
+
+```{r OP_dur_peri_statg, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2b %>%
+  dplyr::select(-df,-y.position) %>%  
+#  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 C (between groups)__
+
+```{r stat2c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2c %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>% 
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 D (between gender)__
+
+```{r stat2d, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2d %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Percentage of duration in the center
+
+```{r OP_dur_center_per, fig.align = "left", fig.width=9, fig.height=4}
+
+### 3.3 Duration(%) in the center
+  
+# stats fig3a
+stat_3a <- data %>%
+    filter(no == "Sum") %>%
+    wilcox_test(`perc_time_center` ~ group,exact=FALSE) %>%
+    add_significance("p") %>%  
+    add_xy_position(x = "group") 
+
+# plot fig3a
+pl_3a <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `perc_time_center`, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(1,14)) + 
+  labs(title="Percentage of time in the center zone", x="", y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3a, label = "p.signif", tip.length = 0.02)
+ 
+#pl_3a
+
+#################################   
+
+# stats fig3b
+stat_3b <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`perc_time_center` ~ gender,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig3b
+pl_3b <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `perc_time_center`, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +    
+#  coord_cartesian(ylim=c(1,14)) +  
+  labs(title="Percentage of time in the center zone", x="", y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 1, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3b, label = "p.signif", tip.length = 0.02)
+
+#pl_3b  
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig3 <- ggarrange(pl_3a, pl_3b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig3
+
+```
+
+__Figure 3.__ Percentage of the time spent in the center zone between groups (A) and between gender within group (B).
+
+__Statistics for Figure 3 A (between groups)__
+
+```{r stat3a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>% 
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 B (between gender)__
+
+```{r stat3b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Number of visits to the centre zone
+
+```{r OP_zone_crossing, fig.align = "left", fig.width=9, fig.height=4}
+
+### 3.4 AMOUNT OF CROSSINGS INTO ANOTHER ZONE ---------------------------------
+
+# stats fig4a
+stat_4a <- data %>%
+    filter(no == "Sum") %>%
+    wilcox_test(`Visits center` ~ group,exact=FALSE) %>%
+    add_significance("p") %>%  
+    add_xy_position(x = "group") 
+
+# plot fig4a
+pl_4a <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Visits center`, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+  coord_cartesian(ylim=c(15,80)) +  
+  labs(title="Number of visits to the center zone", x="", y = "Number of visits") +  
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_4a, label = "p.signif", tip.length = 0.02)
+
+#pl_4a
+
+#################################   
+
+# stats fig4b
+stat_4b <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`Visits center` ~ gender,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig4b
+pl_4b <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Visits center`, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +    
+  coord_cartesian(ylim=c(15,80)) +  
+  labs(title="Number of visits to the center zone", x="", y = "Number of visits") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+#  stat_n_text(y.pos = 5) +  
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 15, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +   
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_4b, label = "p.signif", tip.length = 0.02)
+
+#pl_4b  
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig4 <- ggarrange(pl_4a, pl_4b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig4
+
+```
+
+__Figure 4.__ Number of visits to the center zone between groups (A) and between gender within group (B).
+
+__Statistics for Figure 4 A (between groups)__
+
+```{r stat4a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_4a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>% 
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 4 B (between gender)__
+
+```{r stat4b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_4b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Cohort comparision
+
+```{r fig5, fig.align = "left", fig.width=9, fig.height=9}
+
+#################################
+
+# stats fig5a
+stat_5a <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`Track length (cm)` ~ cohort,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig5a
+pl_5a <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Track length (cm)`, color = cohort, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Distance traveled (10m)", x="", y = "Distance (cm)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text(y.pos = 3000) +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 3000, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +    
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5a, label = "p.signif", tip.length = 0.02)
+
+#pl_5a
+
+################################# 
+
+# stats fig5b
+stat_5b <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`Duration (s) center` ~ cohort,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig5b
+pl_5b <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Duration (s) center`, color = cohort, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +
+#  coord_cartesian(ylim=c(0,175)) +
+  labs(title="Time spent in the center", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 5, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +    
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5b, label = "p.signif", tip.length = 0.02)
+
+#pl_5b
+
+#################################   
+
+# stats fig5c
+stat_5c <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`perc_time_center` ~ cohort,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig5c  
+pl_5c <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `perc_time_center`, color = cohort, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(1,14)) + 
+  labs(title="Percentage of time in the center zone", x="", y = "Percentage") + 
+  theme_classic() +
+  theme_pubr() + 
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 1, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5c, label = "p.signif", tip.length = 0.02)
+
+#pl_5c
+
+#################################
+
+# stats fig5d
+stat_5d <- data %>%
+    filter(no == "Sum") %>%
+    group_by(group) %>%
+    wilcox_test(`Visits center` ~ cohort,exact=FALSE) %>%
+    add_significance("p") %>%
+    add_xy_position(x = "group")
+
+# plot fig5d
+pl_5d <- data %>%
+  filter(no == "Sum") %>%
+  ggplot(aes(x = group, y = `Visits center`, color = cohort, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+  coord_cartesian(ylim=c(15,80)) +  
+  labs(title="Number of visits to the center zone", x="", y = "Number of visits") +  
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+#  stat_n_text(y.pos = 5000) + 
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 15, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +   
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5d, label = "p.signif", tip.length = 0.02)
+
+#pl_5d
+
+#################################
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig5 <- ggarrange(pl_5a, pl_5b, pl_5c, pl_5d, labels="AUTO", ncol=2, nrow=2, common.legend=TRUE, legend = "bottom") 
+
+fig5
+
+```
+
+__Figure 5.__ Comparison between cohorts. Distance traveled (cm) (A), Time spent in the periphery (B) Percentage of the time spent in the center zone (C), and Number of visits to the center zone (D). 
+
+\newpage
+
+__Statistics for Figure 5 A (between cohort)__
+
+```{r stat5a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5a %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+__Statistics for Figure 5 B (between cohort)__
+
+```{r stat5b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+__Statistics for Figure 5 C (between cohort)__
+
+```{r stat5c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5c %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+__Statistics for Figure 5 D (between cohort)__
+
+```{r stat5d, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5d %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+*********
+
+### Conclusion
+
+*********

@@ -1,0 +1,452 @@
+---
+title: "Passive avoidance test analysis (All Cohorts)"
+author: "2006_Larkum_Zolnik-L6b"
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Passive avoidance test analysis 
+developed by: Narendra Solanki (NS) 
+last update: 22.04.2024
+
+This script takes the .csv data and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : data file (.csv file)
+                   lookup file (.xlsx)
+             
+CURRENT SETTINGS : ONLY TESTED FOR THE X!!!
+                   1 Cohort 
+                   3 strains
+                   > This means that the script is currently able to analyze a 
+                   project consisting of the settings above. For all other 
+                   settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the data and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 Number of visits to the dark side
+                    3.2 Time in the light side vs the dark side
+                    3.3 Latency to the dark side
+                    
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+
+
+NOTES             : - This script has been tested on the Project 'X'. 
+                      Variations in the zone/column naming may lead to errors
+                      > if this occurs there are two options:
+                          1. Rerun the preprocessor and use the zone names as in the above project
+                            
+                             OR
+                             
+                          2. Replace the column references in this script for the analysis
+                    
+                    - Make sure that the zones in Cohort 1 and Cohort 2 (if available) are named identically otherwise the merging step will not be able to find the matching zones
+                      
+
+-->
+
+## Passive Avoidance Test 
+
+-- **Duration -  []**   
+-- **Parameters\:**   
+
+
+-- **Illustration:**  
+Boxplots and individual scores  
+
+```{r, include=FALSE}
+getwd()
+```
+
+
+```{r pa_load_data_c123}
+
+#----------------------1. MANUAL ENTRIES & 2. LOAD DATA-----------------------#
+
+# cohort 1
+cohort1 <- choose.files()     
+data1 <- read.csv(cohort1, header=T, skip=1, sep =";", dec = ",")
+data1 <- data1[-1,]
+data1$cohort <- "1"
+data1 <- data1 %>% 
+  mutate(Animal = as.character(AnimNo)) 
+
+# cohort 2
+cohort2 <- choose.files()     
+data2 <- read.csv(cohort2, header=T, skip=1, sep =";", dec = ",")
+data2 <- data2[-1,]
+data2$cohort <- "2"
+data2 <- data2 %>% 
+  mutate(Animal = as.character(AnimNo)) 
+
+# cohort 3
+cohort3 <- choose.files()   
+data3 <- read.csv(cohort3, header=T, skip=1, sep =";", dec = ",")
+data3 <- data3[-1,]
+data3$cohort <- "3"
+data3 <- data3 %>% 
+  mutate(Animal = as.character(AnimNo)) 
+
+# Create data file with all cohort data
+list_df123 <- list(data1, data2, data3)
+data123 <- list_df123 %>% reduce(full_join, by=NULL)
+
+# Load lookup data files
+lookupfile <- choose.files()  
+
+# Read lookup data files
+lookup <- read_excel(paste(lookupfile,sep = ""))
+lookup <- lookup %>% 
+  mutate(Animal = as.character(Animal),
+         cohort = as.character(cohort)) 
+
+# combine exp data with lookup data
+data_pa <- full_join(data123,lookup , by= c("cohort", "Animal"))
+data_pa$cohort <- as.numeric(data_pa$cohort)
+
+# need genotype to be factor for later stat analysis
+data <- data_pa %>% mutate(geno = as.factor(genotype))
+
+## Extract relevant data
+data <- data %>% 
+  select (Animal, sex, geno, cohort, Visits.Bright, Visits.Dark, Time.Bright, Time.Dark, Latency) %>%
+  mutate(Time.Bright = Time.Bright/1000,
+         Time.Dark = Time.Dark/1000,
+         Latency = Latency/1000)
+
+```
+
+```{r stat_func, echo=F}
+
+# list of gender
+list_of_genders <- c("F", "M")
+list_of_genders <- as.factor(list_of_genders)
+
+# list of genotypes
+list_of_genotypes <- c("Cre+", "hM4D+", "WT") 
+
+# BETWEEN GENOTYPES
+stats_bgeno <- function(data, parameter, info_text, grouping_factor="geno") {
+ 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))
+    
+    stat_data <- df 
+
+    # perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+        st = tidy(pairwise.wilcox.test(stat_data$param, stat_data$group, p.adjust.methods = "BH", exact = FALSE)) %>%          
+       mutate(method = "Pairwise Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between genotypes"), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+return(stats)
+}
+
+# BETWEEN GROUPS
+stats_bgr <- function(data, parameter, info_text, grouping_factor="LD") {
+########### param = Dur 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))
+  
+  for (i in 1:length(list_of_genotypes)) {
+    stat_data <- df %>%
+      filter(geno == list_of_genotypes[i])
+    
+    # perform Wilcoxon Rank Sum Tests to compare between group difference
+    st = tidy(wilcox.test(param ~ factor(group), stat_data, exact = FALSE)) %>%         
+       mutate(method = "Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between light & dark for", list_of_genotypes[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+    }
+return(stats)
+}
+
+```
+
+### Experimental conditions
+
+3 cohort of mice:
+
+* Cohort 1,2 & 3:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Tests\L6b_PA`  
+
+Cohort 1,2 & 3:  
+
+`C1_group results.CSV`,   
+`C2_group results.CSV`,   
+`C3_group results.CSV`.
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\7. Final Report`    
+
+### Data Quality:  
+->All data can be used.  
+
+\newpage 
+
+### Results
+
+#### Number of visits to the dark side (All Cohorts)
+
+```{r pl_dVisit, fig.width = 9, fig.height = 6}
+
+#----------------------------------3. ANALYSIS--------------------------------#
+
+# 3.1 Number of visits to the dark side
+
+pl_dVisit <- data %>%
+#  filter(cohort == 1) %>%
+  ggplot(aes(x = geno, y = Visits.Dark, color = geno, label ="")) +
+  geom_boxplot() +
+  geom_point(aes(colour = geno),
+             position=position_jitter(w=0.2, h=0.2)) +  
+  labs(x="", 
+       y = "Number of visits",  
+       title = "Number of visits to the dark side") +
+  theme_pubr() + 
+  #define position of 'n='
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+pl_dVisit
+
+```
+
+__Figure 1.__ Comparison of number of visits to the dark side between genotypes.
+
+__Statistics for Figure 1. Number of visits stats__
+
+```{r number of visits stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GENOTYPES)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+stats_fig1 <- stats_bgeno(pl_dVisit$data, "Visits.Dark", "Fig 1, visits to dark") 
+stats = bind_rows(stats, stats_fig1)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("hold_position","scale_down"))
+
+```
+
+\newpage
+
+#### Time in the light side vs the dark side (All Cohorts)
+
+```{r pl_time, fig.width = 9, fig.height = 6}
+
+# 3.2 Time in the light side vs the dark side
+
+pl_Time <- data %>%
+  select(`Time.Bright`, `Time.Dark`, `Animal`, `sex`, `geno`, `cohort`) %>%
+  rename(Light = `Time.Bright`,
+         Dark = `Time.Dark`) %>%
+#  filter(cohort == 1) %>%
+  gather(key = "LD", value = "Dur", -`Animal`, -`sex`, -`geno`, -`cohort`) %>%
+ 
+#  ggplot(aes(x = LD, y = Dur, color = factor(LD), label ="")) +
+  ggplot(aes(x = factor(LD, level=c("Light","Dark")),y = Dur, color = factor(LD, level=c("Light","Dark")), label ="")) + # change bar and color order  
+  geom_boxplot() +
+  facet_grid (~geno) +  
+#  geom_point(aes(colour = factor(LD)),
+  geom_point(aes(colour = factor(LD, level=c("Light","Dark"))), # change color order
+             position=position_jitter(w=0.2, h=0.2)) +
+ 
+  labs(x="", 
+       y = "Time (s)",  
+       title = "Time spent in the light side vs the dark side") +
+  theme_pubr() + 
+  #define position of 'n='
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+pl_Time
+
+```
+
+__Figure 2.__ Comparison of time spent in the light side vs the dark side in seconds between genotypes.
+
+__Statistics for Figure 2. Light vs Dark side stats__
+
+```{r time stats}
+
+# Stats for Figure 2 (COMPARISON WITHIN GENOTYPES)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+stats_fig2 <- stats_bgr(pl_Time$data, "Dur", "Fig 2, time") 
+stats = bind_rows(stats, stats_fig2)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("hold_position","scale_down"))
+
+```
+
+\newpage
+
+#### Latency to the dark side (All Cohorts)
+
+```{r pl_latency, fig.width = 9, fig.height = 6}
+
+# 3.3 Latency to the dark side
+
+pl_dLat <- data %>%
+#  filter(cohort == 1) %>%
+  ggplot(aes(x = geno, y = Latency, color = geno, label ="")) +
+  geom_boxplot() +
+  geom_point(aes(colour = geno),
+             position=position_jitter(w=0.2, h=0.2)) +  
+  labs(x="", 
+       y = "Latency (s)",  
+       title = "Latency to the dark side") +
+  theme_pubr() + 
+  #define position of 'n='
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+pl_dLat
+
+```
+
+__Figure 3.__ Comparison of latency to the dark side between genotypes.
+
+__Statistics for Figure 3. Latancy stats__
+
+```{r latancy stats}
+
+# Stats for Figure 3 (COMPARISON BETWEEN GENOTYPES)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+stats_fig3 <- stats_bgeno(pl_dLat$data, "Latency", "Fig 3, latency") 
+stats = bind_rows(stats, stats_fig3)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("hold_position","scale_down"))
+
+```
+
+******
+
+### Conclusion
+
+******

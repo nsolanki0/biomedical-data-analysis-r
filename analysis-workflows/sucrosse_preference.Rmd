@@ -1,0 +1,241 @@
+---
+title: "Sucrose preference test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(grid)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(randomcoloR)
+library(gtable)
+library(ggrepel)
+library(tinytex)
+library(EnvStats)
+library(knitr)
+library(kableExtra)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Sucrose Preference Test Analysis 
+developed by: Narendra Solanki (NS)
+last update: 20.01.2023
+
+This script takes the preprocessed data from the PREPROCESSOR.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : sucrose preference file (.xlsx)
+                   
+
+CURRENT SETTINGS : ONLY TESTED FOR 'X' PROJECT!!!
+                   1 Cohorts 
+                   2 strains
+                   > This means that the script is currently able to analyze a 
+                   project consisting of the settings above. For all other 
+                   settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the data and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 Sucrose preference during test phase
+               
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+
+
+NOTES             
+                       
+-->
+
+## Sucrose Preference Test
+
+-- **Illustration:**  
+Boxplots and individual scores  
+
+```{r data_loading}
+
+rm(list = ls())
+dir = getwd()
+
+#--------------------------- 1. Manual Entries -----------------------------#
+# 1.1 INPUT FILES 
+file_path <- "~/6. Data from Behavioral Tests/Sucrose/"
+
+raw_data_file <- "sucrose_preference_test_new.xlsx"
+
+# 1.2 PLOT
+#here we define the colors we going to use for the different strains in the plots
+color_flu <- c('#0099CC', '#FF9900', '#DC143C', '#8B008B')
+
+
+#---------------------------2. LOAD DATA-----------------------------#
+# Load data
+raw_data = read_excel(paste(file_path,raw_data_file, sep=""))  # read excel file
+
+#get list of strains without NAs
+list_of_genotypes <- sort(na.omit(unique(raw_data$genotype)), decreasing = T)
+
+data_suc <- raw_data %>%
+  # Factor the genotype/group variable
+  mutate(Genotype = factor(genotype, levels = list_of_genotypes),
+         # creates new col with Cohort as.factors
+         Cohort = as.factor(cohort),  # otherwise ggplot raises an error
+         # calculate water intake and save it in a new column
+         water_in = (`water_b(g)` - `water_a(g)`),
+         # calculate sucrose intake and save it in a new column
+         sucrose_in = (`sucrose_b(g)` - `sucrose_a(g)`),
+         # calculate sucrose preference and save it in a new column
+         sucrose_pref = sucrose_in/(sucrose_in + water_in)) 
+
+```
+
+### Experimental conditions
+
+1 cohort of mice:
+
+* Cohort 1:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to the data file: `\6. Data from Behavioral Tests\Sucrose`
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `\7. Final Report`    
+
+### Data Quality:  
+->All data can be used.  
+
+\newpage 
+
+### Results
+
+#### Test phase
+
+##### Sucrose preference 
+
+```{r pl_suc_pref, fig.width = 9, fig.height = 6}
+
+#---------------------------3. ANALYSIS-----------------------------#
+# 3.1 Sucrose preference of animals during test phase 
+
+pl_suc_pref <- data_suc %>%
+  ggplot(aes(x = Genotype, y = sucrose_pref, color = Genotype, label ="")) +
+  geom_boxplot(outlier.shape = NULL) +
+  #add color by strain
+  scale_colour_manual(values = color_flu) +
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(dodge.width = 0.05), aes(shape = Cohort), size = 2) +
+  #define position of 'n='
+  stat_n_text(y.pos = 5) +
+  #remove filling (length of values needs to be equal to number of cohorts)
+  scale_shape_manual(values = c(1,2)) +
+  #ids as label
+  geom_text(hjust = 0, nudge_x = 0.05) +
+  #axis title
+  labs(x="", 
+       y = "Sucrose preference score",  
+       title = "Sucrose Preference") +
+  #y-limit
+  coord_cartesian(ylim = c(-1, 1)) +
+  #add a theme
+  theme_pubr() + 
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+pl_suc_pref
+
+```
+
+__Figure 1.__ Comparison of sucrose preference between genotypes.
+
+__Statistics for Figure 1. Sucrose preference stats__
+
+```{r pl_suc_pref stats}
+
+#for the kruskal wallis we need to have the genotype/Group = as.factor(genotype)
+kruskal.test(sucrose_pref~Genotype, data = data_suc)
+
+```
+
+******
+
+### Conclusion
+
+******

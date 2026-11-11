@@ -1,0 +1,691 @@
+---
+title: "Pre Pulse Inhibition (PPI) test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused  
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Pre Pulse Inhibition (PPI) analysis
+author: Narendra Solanki (NS)
+last update: 02.08.2024
+
+This script takes raw data and a lookup table, and returns plots and statistical analysis as pdf.
+It can be run by itself, or used as an R child. 
+
+
+INPUT DATA       : data file (.csv file)
+                   lookup file (.xlsx)
+             
+CURRENT SETTINGS : 4 groups
+                   Trials: 3
+                   > This means that the script is currently able to analyze a 
+                   project consisting of the settings above. For all other 
+                   settings the scripts needs to be adjusted accordingly
+
+
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input file
+                        > Experimental settings
+                        > plots (color, theme etc.)
+                        
+                  
+                  # 2. LOAD DATA:
+                    - loads the data and lookup, and tidies it up into a polished "data" data frame
+                  
+                  # 3. ANALYSIS
+                    3.1 PrePulse Inhibition
+                    3.2 MaxG in Habituation
+
+                    For each section a plot and a statistical analysis is performed
+                  
+                  # 4. Final conclusions and comments
+
+
+
+NOTES             : 
+
+IMPORTANT: The system was set to the 5 P120db40ms at the beginning and 5 at the end.
+If these system settings change (in another project for example), the analysis template needs to be adjusted accordingly.
+                      
+
+-->
+
+\newpage
+
+## Pre Pulse Inhibition (PPI)
+
+-- **Duration: 20-30 minutes**   
+
+<!-- Test description here -->
+The ‘acoustic startle response’ (also referred to as the ‘startle reflex’ or ‘alarm reaction’) is an innate reflexive reaction to an intense unexpected acoustic stimulus (loud noise). In rodents the response is manifested as a rapid muscle contraction resembling a ‘flinch-like’ action. The test is used as a tool to help assess sensorimotor processing (Geyer and Swerdlow 1998). A commonly performed variation of the startle response is the ‘prepulse inhibition test’ (PPI). This consists of a weaker pre-stimulus (pre-pulse) that precedes the intense stimulus (startle pulse). The resulting effect that is generally seen is a reduced reaction to the intense stimulus (Empress Standard operating procedure). Deficits in prepulse inhibition of the startle response are typical in patients suffering from schizophrenia and other mental and neurodegenerative diseases such as autism spectrum disorders (slower habituation), obsessive compulsive disorder, Tourette's syndrome, Huntington's disease, Parkinson's disease, and Alzheimer's Disease (Valsamis et al., 2011).  
+
+- *Empress Standard operating procedure. Title: Acoustic startle and Pre-pulse inhibition. Doc. Number: ESLIM_011_001 Rev NO. 1. Date Issued:22/02/2007*
+- *Geyer MA and Swerdlow NR, Measurement of Startle Response, Prepulse Inhibition, and Habituation: Current Protocols in Neuroscience (1998) 8.7.1-8.7.15*
+- *Tatiana Lipina, Viviane Labrie, Ina Weiner, John Roder. Modulators of the glycine site on NMDA receptors, D-serine and ALX 5407, display similar beneficial effects to clozapine in mouse models of schizophrenia: Psychopharmacology (2005) 179: 54–67*
+- *Valsamis, B., Schmid, S. Habituation and Prepulse Inhibition of Acoustic Startle in Rodents. J. Vis. Exp. (55), e3446, doi:10.3791/3446 (2011)* 
+
+-- **Parameters:**   
+
+Lipina 2005: The force intensity for each trial was recorded as the startle level. The average percent reduction in startle intensity between pulse and prepulse + pulse trials at all three prepulse levels was defined as the PPI level. The percentage PPI induced by each prepulse intensity was calculated as [1-(startle amplitude on prepulse trial)/(startle amplitude on pulse alone)] × 100%. Startle magnitude in this formula was calculated as the average response to all of the P trials, excluding the first and last blocks of five P trials.
+
+-- **Illustration:**  
+
+(add description here)
+
+```{r data_loading, message=FALSE, warning=FALSE}
+
+rm(list = ls())
+
+#--------------------------- 1. Manual Entries -----------------------------#
+# 1.1 INPUT FILES
+file_path <- "~\\AOCF-Behavioral Tests\\PPI\\validation\\group data\\"
+
+raw_data_file1 <- "PPI_group1_resultstable.xlsx"
+raw_data_file2 <- "PPI_group2_resultstable.xlsx"
+raw_data_file3 <- "PPI_group3_resultstable.xlsx"
+raw_data_file4 <- "PPI_group4_resultstable.xlsx"
+
+#---------------------------2. LOAD DATA-----------------------------#
+# Load data
+#raw_data1 <- read_excel(paste(file_path, raw_data_file1, skip = 1))
+
+raw_data1 <- read_excel(paste(file_path, raw_data_file1, sep = ""), skip = 1)
+data1 <- raw_data1[-1,]
+data1$grs <- "gr1"
+data1 <- data1 %>% 
+  mutate(Animal = as.character(Anim.No.))
+#raw_data <- na.omit(raw_data)
+
+raw_data2 <- read_excel(paste(file_path, raw_data_file2, sep = ""), skip = 1)
+data2 <- raw_data2[-1,]
+data2$grs <- "gr2"
+data2 <- data2 %>% 
+  mutate(Animal = as.character(Anim.No.))
+
+raw_data3 <- read_excel(paste(file_path, raw_data_file3, sep = ""), skip = 1)
+data3 <- raw_data3[-1,]
+data3$grs <- "gr3"
+data3 <- data3 %>% 
+  mutate(Animal = as.character(Anim.No.))
+
+raw_data4 <- read_excel(paste(file_path, raw_data_file4, sep = ""), skip = 1)
+data4 <- raw_data4[-1,]
+data4$grs <- "gr4"
+data4 <- data4 %>% 
+  mutate(Animal = as.character(Anim.No.),
+         Animal = str_replace_all(Animal, "51", "551"))
+
+#Create data file with all cohort data
+dat <- rbind(data1,data2,data3,data4)
+
+# Load lookup data files
+lookupfile <- "PPI_group_lookup_ns.xlsx"
+
+# Read lookup data files
+lookup <- read_excel(paste(file_path,lookupfile,sep = ""))
+lookup <- lookup %>% 
+  mutate(Animal = as.character(ID),
+         grs = as.character(groups)) 
+
+# combine exp data with lookup data
+data_ppi <- full_join(dat,lookup , by= c("grs", "Animal"))
+
+# Factor the genotype/group/sex variable 
+data <- data_ppi %>%
+  mutate(sex = as.factor(sex),
+         grs = as.factor(grs),
+         geno = as.factor(genotype)) 
+
+```
+
+### Experimental conditions
+
+4 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `AOCF-Behavioral Tests\PPI\validation\group data`  
+
+Preprocessed Data: 
+ 
+4 groups:  
+
+`PPI_group1_resultstable.xlsx`    
+`PPI_group2_resultstable.xlsx`    
+`PPI_group3_resultstable.xlsx`    
+`PPI_group4_resultstable.xlsx`    
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `AOCF-Behavioral Tests\PPI\validation\group data`    
+
+### Data Quality:  
+->All data can be used.  
+
+```{r calc_PPI, echo=F, message=FALSE, warning=FALSE}
+
+#-----------------------MAX G is the startle intensity ---------------------# 
+
+#for PP trials, the force intensity for each trial was recorded as the startle level.
+#Based on the Lipina 2005 protocol. 
+
+### STEP 1 - remove the first and last Pulse trials
+
+#remove first 5 trials and last 3 trials via the column 'No' which indexes all trials per individual
+#calculate upper limit (highest No-value minus 3)
+#upper_lim = range(data$No)[2]-3 # this virtually set the limit at 60 trials minus 3 (last trials)
+
+#upper_lim = range(data$No)[2]-5
+upper_lim = range(data$No)[2]-3
+
+#Range(data$No) returns the lowest and highest value in columns ‘No’ in data. Range(data$No)[1] returns only the lowest value and range(data$No)[2] returns only the highest value (60 in this case). Therefore, actually this virtually set the limit at maximum number of trials minus 3 (last trials). 
+data_red = data %>% filter(No %in% c(6:upper_lim))
+
+### STEP 2: sanity checks on data read
+
+# count number of pulse trials ("P120db40ms") in data
+check_data = data %>% 
+  filter(Trial == "P120db40ms") %>% #filter only Pulse-Trial "P120db40ms"
+  group_by(Animal) %>% count() %>% rename(Pcount = n)
+
+#count number of pulse trials 
+sancheck = data_red %>% 
+  filter(Trial == "P120db40ms") %>% #filter only Pulse-Trial "P120db40ms"
+  group_by(Animal) %>% count() %>% rename(Pcount_redData=n) %>%  cbind(.,check_data$Pcount) %>%  rename(Pcount = ...3)
+#number of pulse trials in data should be 20, number of pulse trials in reduced data schould be 10, for which animals that is not the case
+Pcount_animals = sancheck %>% filter(Pcount_redData != 10)
+
+
+### STEP 3 group data by ID, genotype, sex, Trial and then calculate average of RTMS, DurationMS, MaxMS and MaxG for every group 
+# (i.e. every animal and every trial)  
+averaged_data = data_red %>% group_by(Animal, genotype, sex, Trial, geno, grs) %>%
+  summarise(av_RTMS = mean(as.numeric(RTMS)), 
+            av_DurationMS = mean(as.numeric(DurationMS)), 
+            av_MaxMS = mean(as.numeric(MaxMS)), 
+            av_maxG = mean(as.numeric(MaxG))) #%>%
+
+#transform column Trial into wide format
+wide_av_data = pivot_wider(averaged_data, names_from = Trial, values_from = starts_with('av_')) %>% 
+  #calculate the remaining startle percentage for every prepulse by dividing 
+  #the average of max amplitude (av_maxG) of prepulse / average of max amplitude (av_maxG) of pulse   
+  mutate(Remaining_startle_perc_PP69_20msP = 100 * (`av_maxG_PP69-20msP` / av_maxG_P120db40ms),
+         Remaining_startle_perc_PP73_20msP = 100 * (`av_maxG_PP73-20msP` / av_maxG_P120db40ms),
+         Remaining_startle_perc_PP81_20msP = 100 * (`av_maxG_PP81-20msP` / av_maxG_P120db40ms)) %>%
+  #calculate PPI % for every prepulse by subtracting remaining startle % from 100 
+  mutate(PPI_perc_PP69_20msP = 100 - Remaining_startle_perc_PP69_20msP,
+         PPI_perc_PP73_20msP = 100 - Remaining_startle_perc_PP73_20msP,
+         PPI_perc_PP81_20msP = 100 - Remaining_startle_perc_PP81_20msP)
+
+#select columns and convert table back to long format in order to plot it
+long_av_data = wide_av_data %>% 
+  #select columns to keep
+  dplyr::select(c(Animal, genotype, geno, sex, grs, PPI_perc_PP69_20msP, PPI_perc_PP73_20msP, PPI_perc_PP81_20msP)) %>%
+  #convert back into long format
+  pivot_longer(cols = c(PPI_perc_PP69_20msP, PPI_perc_PP73_20msP, PPI_perc_PP81_20msP), names_prefix ='PPI_perc_', names_to='Trial', values_to='PPI_perc') %>% 
+  mutate(PPI_perc = abs(PPI_perc)) #take absolute values (no negative values)
+
+## HABITUATION DATA
+#create a new column 'part'. This new column is 1 for the first 5 pulse trials, 2 for the middle 10 trials, 3 for the last 5 trials
+  # count number of individuals
+n_ID = length(unique(data$Animal))
+  # for each individual repeat 5 times 1, then 10 times 2, then 5 times 3
+
+part=rep(c(rep(1, 5),rep(2,12),rep(3,3)),n_ID)
+
+#filter only pulse trials and add the new column  
+hab_data = data %>% 
+  filter(Trial == unique(data$Trial)[1]) %>%  #filter only Pulse-Trial "P120db40ms"
+  #add the new column 'part'
+  cbind(.,part) %>% 
+  dplyr::select(c(Animal, sex, geno, grs, Trial, part, MaxG)) %>% 
+  #calculate average of maxG for each part
+  group_by(part, geno, Animal, sex, grs) %>%
+  summarise(av_maxG=mean(as.numeric(MaxG)))  
+#  summarise(av_maxG=mean(MaxG), .groups = 'drop')
+
+```
+
+
+```{r stat_func, echo=F}
+
+# list of gender
+list_of_genders <- c("female", "male")
+list_of_genders <- as.factor(list_of_genders)
+
+# list of genotypes
+list_of_genotypes <- long_av_data$geno
+
+# list of trials
+list_of_trials = as.factor(unique(long_av_data$Trial))
+
+# list of parts
+list_of_parts = as.factor(unique(hab_data$part))
+
+# list of groups
+list_of_grs = unique(long_av_data$grs)
+
+##
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+stats_bgdtrials <- function(data, parameter, info_text, grouping_factor="sex") {
+ 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))    
+
+  for (i in 1:length(list_of_trials)) {
+    stat_d <- df %>%
+      filter(Trial == list_of_trials[i])  
+    for (j in 1:length(list_of_grs)) {
+      stat_data <- stat_d %>%
+        filter(grs == list_of_grs[j])
+    # perform Wilcoxon Rank Sum Tests to compare between group difference
+    st = tidy(wilcox.test(param ~ factor(group), stat_data, exact = FALSE)) %>%         
+       mutate(method = "Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between genders for", list_of_grs[j], "in", list_of_trials[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+    }
+  }
+return(stats)
+}
+
+##
+# BETWEEN GENDERS WITHIN SAME GENOTYPE
+stats_bgdparts <- function(data, parameter, info_text, grouping_factor="sex") {
+ 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))    
+
+  for (i in 1:length(list_of_parts)) {
+    stat_d <- df %>%
+      filter(part == list_of_parts[i])  
+    for (j in 1:length(list_of_grs)) {
+      stat_data <- stat_d %>%
+        filter(grs == list_of_grs[j])
+    # perform Wilcoxon Rank Sum Tests to compare between group difference
+    st = tidy(wilcox.test(param ~ factor(group), stat_data, exact = FALSE)) %>%         
+       mutate(method = "Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between genders for", list_of_grs[j], "in", list_of_parts[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+    }
+  }
+return(stats)
+}
+
+```
+
+\newpage
+
+### Results 
+
+#### PrePulse Inhibition 
+
+```{r pl_av_PPI, fig.width = 9, fig.height = 9}
+
+pl_av_PPI = long_av_data %>% 
+  ggplot(aes(x=grs, y=PPI_perc, color = grs)) +
+  geom_boxplot(outlier.shape = NULL) +
+  facet_grid (~Trial) +
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define the position of the n=
+  stat_n_text(y.pos = 0.5) +
+  theme_pubr() +
+  labs(x="",
+       y="% PPI",
+       title = "Average PPI per PrePulse-Trail") + 
+  theme(legend.position = "bottom",
+      plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_av_PPI
+
+pl_av_PPI_s = long_av_data %>% 
+  ggplot(aes(x=grs, y=PPI_perc, color = factor(sex))) +
+  geom_boxplot(outlier.shape = NULL) +
+  facet_grid (~Trial) +   
+  #add data-points (not overlapping)
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  #define the position of the n=
+  stat_n_text(y.pos = 0.5) +
+  theme_pubr() +
+  labs(x="",
+       y="% PPI",
+       title = "Average PPI per PrePulse-Trail") + 
+  theme(legend.position = "bottom",
+      plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) 
+
+#pl_av_PPI_s
+
+#arrange the 2 plots created above into a grid with 1 rows and 2 column with automatic labelling (A,B)
+Fig1 <- ggarrange(pl_av_PPI, pl_av_PPI_s, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig1
+
+```
+
+__Figure 1: Comparison of PrePulse Inhibition (%PPI) averaged per animal for three prepulses of different intensity between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 1 A__
+
+```{r fig1 stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GROUPS)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+  for (i in 1:length(list_of_trials)) {
+    stat_data <- pl_av_PPI$data %>%
+      filter(Trial == list_of_trials[i])
+    
+# perform Pairwise Wilcoxon Rank Sum Tests to compare within genotpye difference
+st = tidy(pairwise.wilcox.test(stat_data$PPI_perc, stat_data$grs, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 1 A, %PPI",
+          test = paste("between groups in", list_of_trials[i]), 
+          sign=ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 B (Between genders)__
+
+```{r fig11 stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GENDERS)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+stats_fig1 <- stats_bgdtrials(pl_av_PPI_s$data, "PPI_perc", "Fig 1, %PPI") 
+stats = bind_rows(stats, stats_fig1)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+ 
+\newpage
+
+__Statistics for Figure 1 B (Between genotypes)__
+
+```{r fig12 stats}
+
+# Stats for Figure 1 (COMPARISON BETWEEN GENOTYPES)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+  for (i in 1:length(list_of_trials)) {
+    stat_d <- pl_av_PPI_s$data %>%
+      filter(Trial == list_of_trials[i])  
+    for (j in 1:length(list_of_genders)) {
+      stat_data <- stat_d %>%
+        filter(sex == list_of_genders[j])
+      # perform Pairwise Wilcoxon Rank Sum Tests to compare between genotype difference
+      st = tidy(pairwise.wilcox.test(stat_data$PPI_perc, stat_data$grs, exact = FALSE, p.adjust.methods="BH")) %>%      
+       mutate(method = "Pairwise Wilcoxon Sum",
+              variable = "Fig 1, %PPI",
+              test = paste("bn grs for", list_of_genders[j], "in", list_of_trials[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+    }
+  }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+#  kable_styling(latex_options = "scale_down")  
+  kable_styling(full_width = F, latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Habituation
+
+```{r habituation, fig.width = 9, fig.height = 9}
+
+hab_plot = hab_data %>%
+  ggplot(aes(x=grs, y=av_maxG, color=grs)) +  
+#  ggplot(aes(x=as.factor(part), y=av_maxG, color=grs)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_grid (~factor(part)) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  stat_n_text(y.pos = 0.5) +
+  theme_pubr() +
+  labs(x="",
+       y="maxG",
+       title = "Averaged maxG of Pulse trials (P120db40ms)") +
+  theme(legend.position = "bottom",
+      plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#hab_plot
+
+hab_plot_s = hab_data %>%
+  ggplot(aes(x=grs, y=av_maxG, color=factor(sex))) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_grid (~factor(part)) +  
+  geom_point(position = position_jitterdodge(dodge.width = 0.75), size = 2) +
+  stat_n_text(y.pos = 0.5) +
+  theme_pubr() +
+  labs(x="",
+       y="maxG",
+       title = "Averaged maxG of Pulse trials (P120db40ms)") +
+  theme(legend.position = "bottom",
+      plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#hab_plot_s 
+
+#arrange the 2 plots created above into a grid with 1 rows and 2 column with automatic labelling (A,B)
+Fig2 <- ggarrange(hab_plot, hab_plot_s, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig2
+
+```
+
+__Figure 2: Comparison of Maximum amplitude in G (MaxG) of startle response averaged per animal for the first five 5 pulse trials (1), the next 10 pulse trials (2) and the last 5 pulse trials (3) between groups (A) and between gender within group (B).__
+
+\newpage
+
+__Statistics for Figure 2 A__
+
+```{r fig2 stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GROUPS)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+  for (i in 1:length(list_of_parts)) {
+    stat_data <- hab_plot$data %>%
+      filter(part == list_of_parts[i])
+    
+# perform Pairwise Wilcoxon Rank Sum Tests to compare within genotpye difference
+st = tidy(pairwise.wilcox.test(stat_data$av_maxG, stat_data$grs, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+          variable = "Fig 2 A, habituation maxG",
+          test = paste("between groups in", list_of_parts[i]), 
+          sign=ifelse(p.value < 0.05, "*", ""))
+
+#combine stats from every iteration of the loop
+stats = bind_rows(stats, st)
+  }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B (Between genders)__
+
+```{r fig21 stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GENDERS)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+stats_fig2 <- stats_bgdparts(hab_plot$data, "av_maxG", "Fig 2, habituation maxG") 
+stats = bind_rows(stats, stats_fig2)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+__Statistics for Figure 2 B (Between genotypes)__
+
+```{r fig22 stats}
+
+# Stats for Figure 2 (COMPARISON BETWEEN GENOTYPES)
+
+#create a tibble to collect all stats
+stats = tibble()
+
+  for (i in 1:length(list_of_parts)) {
+    stat_d <- hab_plot$data %>%
+      filter(part == list_of_parts[i])
+    for (j in 1:length(list_of_genders)) {
+      stat_data <- stat_d %>%
+        filter(sex == list_of_genders[j])
+      # perform Pairwise Wilcoxon Rank Sum Tests to compare between genotype difference
+      st = tidy(pairwise.wilcox.test(stat_data$av_maxG, stat_data$grs, exact = FALSE, p.adjust.methods="BH")) %>%      
+       mutate(method = "Pairwise Wilcoxon Sum",
+              variable = "Fig 2 B, habituation maxG",
+              test = paste("between grs for", list_of_genders[j], "in", list_of_parts[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+    }
+  }
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+******
+
+### Conclusion
+      
+******

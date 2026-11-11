@@ -1,0 +1,911 @@
+---
+title: "Ymaze Forced Alternation test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+    
+#output:
+#  pdf_document:
+#    fig_caption: yes
+#    number_sections: yes
+#    toc: yes
+#    df_print: kable
+#  html_document:
+#    df_print: kable
+#    toc: yes
+#    toc_float:
+#      collapsed: false
+#    number_sections: yes
+#    theme: cosmo
+#mainfont: palatino
+#geometry: "left=3cm,right=3cm,top=2cm,bottom=4cm"
+#header-includes:
+#    - \usepackage{fancyhdr}
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+# Empty global environment
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticaly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+library(ggsignif)
+library(rstatix)
+
+```
+
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file. 
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: Ymaze Forced Alternation test analysis  
+developed by: Narendra Solanki (NS)
+last update: 27.06.2025
+
+Viewer Software:
+This script takes the preprocessed data from the preprocessor_viewer.R 
+script and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+The script has the following parts:
+
+# LOAD DATA section:
+  - loads the preprocessed data and tidies it up into a polished "data" data frame
+  
+  - this section is always individualized for the specific project
+  depending on the differences in file names, etc.
+  
+  - first, MAKE SURE the current directory is up-to-date
+  and corresponds to the project folder, which has a data folder.
+  Adjust the file name and the script will automatically load the data from this folder.
+  
+  - NOTE1: 
+  this section also checks if the order of zones is the same for all animals.
+  However, it does not yet include section that solves if the order is inconsistent.
+
+# All the following analysis sections are general.
+
+-->
+
+## Ymaze Forced Alternation Test (YmazeFA)
+
+### Experimental conditions
+
+2 Cohorts of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Test\analysis\ymaze FA`  
+
+Preprocessed Data: 
+ 
+2 Cohorts:  
+
+`FA_data_cohort1_2025-06-13.xlsx`    
+`FA_data_cohort2_2025-06-13.xlsx`   
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\6. Data from Behavioral Test\ymaze FA`    
+
+### Data Quality:  
+->All data can be used. 
+
+```{r data_loading}
+
+# Empty global environment
+rm(list = ls())
+
+### 1.0 LOAD IN DATA ----------------------------------------------------------
+# load data
+file_path <- "~/6. Data from Behavioral Tests/analysis/ymaze FA/"
+
+raw_data_file_c1 <- "FA_data_cohort1_2025-06-13.xlsx"
+raw_data_file_c2 <- "FA_data_cohort2_2025-06-13.xlsx"
+
+data_c1 <- read_excel(paste(file_path,raw_data_file_c1,sep=""))
+data_c2 <- read_excel(paste(file_path,raw_data_file_c2,sep=""))
+
+# combine all groups to create a single data frame 
+raw_data <- rbind(data_c1, data_c2)
+
+# # combine all groups to create a single data frame 
+# raw_data <- rbind(data_pm, data_wt)
+# raw_data <- raw_data %>% 
+#   mutate(animal_no = as.numeric(animal_no))
+
+#####
+# lookup
+file_path_lookup <- "~/6. Data from Behavioral Tests/ymaze FA/"
+
+# load lookup data files
+lookup_file <- "lookup_ns.xlsx"
+
+#########
+# read lookup data files
+lookup <- read_excel(paste(file_path_lookup,lookup_file,sep=""))
+names(lookup)[names(lookup) == 'Animal ID'] <- 'animal_no'
+
+lookup <- lookup %>% 
+  mutate(animal_no = as.character(animal_no),
+         cohort = as.character(cohort)) 
+
+# combine data with lookup
+data <- full_join(raw_data,lookup, by= "animal_no")
+
+# get list of groups without NAs
+list_of_groups <- sort(na.omit(unique(data$Group)), decreasing = T)
+
+# select columns of interest
+data <- data %>%
+  rename(group = Group,
+         Arm_3 = `Arm 3 (left, Righ)`) %>%
+  dplyr::select(no, animal_no, group, cohort, Arm_3, `Correct choice in first attempt`, Sex, contains("Tracklength"), contains("Track length"), contains("Visits"), contains("Visit"), contains("Duration")) %>%
+  mutate(group = factor(group, levels = list_of_groups))
+
+#####
+
+#lapply(data,class)
+#names(data)
+
+data <- data %>%
+  mutate(#group = factor(group),
+         cohort = factor(cohort),
+         gender = factor(Sex)) %>%
+  mutate_at(c(6,8:24),as.numeric)
+
+```
+
+\newpage
+
+### Results
+
+#### Correct choice in first attempt
+
+```{r fig1, fig.align = "left", fig.width=9, fig.height=5}
+
+# data fig1
+data_f1 = data %>%
+  filter(no == "Sum") %>%
+  mutate(correct_entry = 1*`Correct choice in first attempt`) %>%
+  mutate(correct_entry = as.factor(correct_entry))
+
+################################# 
+
+# stats fig1a
+#stat_1a <- data_f1 %>%
+#  filter(correct_entry == 1) %>%
+#  count(correct_entry, group) %>%
+##  mutate(group = as.factor(group)) %>%
+#  wilcox_test(n ~ group) %>%
+#  add_significance("p")
+
+# plot fig1a
+pl_1a = data_f1 %>%
+  ggplot(aes(x=group, fill=correct_entry)) +
+  geom_bar(position="dodge") + 
+#  coord_cartesian(ylim=c(0,9)) +
+  labs(title="Correct first attempt", x="", y = "Counts") + 
+  theme_classic() +
+  theme_pubr() +
+  geom_text(stat='count', 
+            aes(label=after_stat(count)), 
+            position = position_dodge(0.9),
+            vjust = -0.08) + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+#  stat_pvalue_manual(stat_1a, label = "p.signif", tip.length = 0.02) 
+
+#pl_1a  
+
+################################# 
+ 
+# stats fig1b
+stat_1b <- data_f1 %>%
+  group_by(group,correct_entry) %>%
+  count(correct_entry, group, gender) %>%  
+  wilcox_test(n ~ gender) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "correct_entry")  # needs to be included
+
+# stat_1b <- stat_1b %>%
+#   # shift positions slightly for p-value labels
+#   mutate(
+#     xmin =  1, 
+#     xmax =  2   
+#   )
+
+# plot fig1b
+pl_1b = data_f1 %>%
+  ggplot(aes(x=correct_entry, fill=gender)) +
+  geom_bar(position="dodge") + 
+#  geom_bar(stat = "identity", position = "dodge") +  
+  facet_grid (~group) +   
+  coord_cartesian(ylim=c(0,7)) +
+  labs(title="Correct first attempt", x="", y = "Counts") + 
+  theme_classic() +
+  theme_pubr() +
+  geom_text(stat='count', 
+            aes(label=after_stat(count)), 
+            position = position_dodge(0.9),
+            vjust = -0.08) + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +   
+#  stat_pvalue_manual(stat_1b, label = "p.signif", tip.length = 0.02)
+  geom_segment(data = stat_1b,
+               aes(x = xmin, xend = xmax, y = y.position, yend = y.position),
+               color = "black", size = 0.5,
+               inherit.aes = FALSE) + 
+  # left vertical handle
+  geom_segment(data = stat_1b,
+               aes(x = xmin, xend = xmin, y = y.position, yend = y.position - 0.2),
+               color = "black", size = 0.5,
+               inherit.aes = FALSE) +
+  # right vertical handle
+  geom_segment(data = stat_1b,
+               aes(x = xmax, xend = xmax, y = y.position, yend = y.position - 0.2),
+               color = "black", size = 0.5,
+               inherit.aes = FALSE) +  
+  geom_text(data = stat_1b,
+            aes(x = xmin + (xmax - xmin) / 2,  # Position in the middle of the group comparison
+                y = y.position+0.3,
+                label = p.signif),
+            # color = "red",
+            # size = 5,
+            # fontface = "italic",
+            inherit.aes = FALSE)
+
+#pl_1b  
+
+################################# 
+
+#arrange plots into a grid with automatic sublabels (A,B)
+fig1 <- ggarrange(pl_1a, pl_1b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig1
+
+```
+
+__Figure 1.__ Correct choice in first attempt during novel phase between groups (A) and between gender within group (B).
+
+__Statistics for Figure 1 B (between gender)__
+
+```{r stat1b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Time spent exploring during novel phase
+
+```{r fig2, fig.align = "left", fig.width=12, fig.height=5}
+
+# data fig2
+data_f2 <- data %>%
+  dplyr::select(`Duration (s) arm 1`,`Duration (s) arm 2`,`Duration (s) arm 3`,group,no,gender) %>%
+  rename("arm_1" = `Duration (s) arm 1`,
+         "arm_2" = `Duration (s) arm 2`,
+         "arm_3" = `Duration (s) arm 3`) %>%
+  mutate(arm_1 = as.numeric(arm_1),
+         arm_2 = as.numeric(arm_2),
+         arm_3 = as.numeric(arm_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "Sides", value = "Dur", -group, -no, -gender) 
+
+################################# 
+# stat fig2a
+stat_2a <- data_f2 %>%
+  group_by(group) %>%
+  pairwise_wilcox_test(Dur ~ Sides, p.adjust.method = "bonferroni")
+
+# plot fig2a
+fig2a <- ggplot(data_f2, aes(x = Sides, y = Dur, color = Sides)) +
+  geom_boxplot() +
+  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+  coord_cartesian(ylim=c(0,225)) +
+  labs(title="Time spent exploring during noval phase", x="", y = "Duration (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text(y.pos = 0) +  
+  geom_signif(
+    comparisons = list(c("arm_1", "arm_2"), c("arm_1", "arm_3"), c("arm_2", "arm_3")),
+    data = data_f2,  # pass data here without repeating it in the aes()
+    map_signif_level = TRUE,
+    color = "black") + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#fig2a
+
+################################# 
+# stat fig2b
+stat_2b <- data_f2 %>%
+  group_by(group, Sides) %>%
+  wilcox_test(Dur ~ gender) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "Sides")  # needs to be included 
+
+# plot fig2b
+pl_2b <- ggplot(data_f2, aes(x = Sides, y = Dur, color = gender)) +
+  geom_boxplot() +
+  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+  coord_cartesian(ylim=c(0,225)) +
+  labs(title="Time spent exploring during noval phase", x="", y = "Duration (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text(y.pos = 0) +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=6, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2b, label = "p.signif", tip.length = 0.02)
+
+#pl_2b
+
+# stat_2b <- stat_2b %>%
+#   add_xy_position(x = "Sides")  
+# 
+# fig2b <- pl_2b +
+#   stat_pvalue_manual(stat_2b, label = "p.signif", tip.length = 0.02)
+
+#fig2b
+
+################################# 
+# arrange plots into a grid with automatic sublabels (A,B)
+fig2 <- ggarrange(fig2a, pl_2b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig2
+
+```
+
+__Figure 2.__ Time spent exploring different arms during noval phase between groups (A) and between gender within group (B). 
+
+__Statistics for Figure 2 A (between groups)__
+
+```{r stat2a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2a %>%
+  dplyr::select(-p.adj) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B (between gender)__
+
+```{r stat2b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### No. of visits to arm 2 and 3 during novel phase
+
+```{r fig3, fig.align = "left", fig.width=12, fig.height=5}
+
+# data fig3
+data_f3 <- data %>%
+  dplyr::select(`Visits arm 2`,`Visits arm 3`,group,no,gender) %>%
+  rename("visits_2" = `Visits arm 2`,
+         "visits_3" = `Visits arm 3`) %>%
+  mutate("visits_2" = as.numeric(visits_2),
+         "visits_3" = as.numeric(visits_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "arms", value = "visits", -group, -no, -gender)  
+
+################################# 
+# stat fig3a
+stat_3a <- data_f3 %>%
+  group_by(group) %>%
+  wilcox_test(visits ~ arms,exact=FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "arms")  # needs to be included  
+
+# plot fig3a
+fig3a <- ggplot(data_f3, aes(x = arms, y = visits, color = arms)) +
+  geom_boxplot() +
+  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+#  coord_cartesian(ylim=c(0,14)) +
+  labs(title="Number of visits", x="", y = "Visits count") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text(y.pos = 0) +
+  # geom_signif(
+  #   comparisons = list(c("visits_2", "visits_3")),
+  #   data = data_f3,  # pass data here without repeating it in the aes()
+  #   map_signif_level = TRUE) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3a, label = "p.signif", tip.length = 0.02)
+
+#fig3a
+
+################################# 
+# stat fig3b
+stat_3b <- data_f3 %>%
+  group_by(group,arms) %>%
+  wilcox_test(visits ~ gender,exact=FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "arms")  # needs to be included 
+ 
+# plot fig3b
+pl_3b <- ggplot(data_f3, aes(x = arms, y = visits, color = gender)) +
+  geom_boxplot() +
+  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+#  coord_cartesian(ylim=c(0,14)) +
+  labs(title="Number of visits", x="", y = "Visits count") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text(y.pos = 0) +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=0, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3b, label = "p.signif", tip.length = 0.02)
+
+#pl_3b
+
+################################# 
+# arrange plots into a grid with automatic sublabels (A,B)
+fig3 <- ggarrange(fig3a, pl_3b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig3
+
+```
+
+__Figure 3.__ Number of visits to arm 2 and 3 during noval phase between groups (A) and between gender within group (B). 
+
+__Statistics for Figure 3 A (between groups)__
+
+```{r stat3a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%  
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 B (between gender)__
+
+```{r stat3b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+\newpage
+
+#### Time spent exploring arm 3 during novel phase
+
+```{r fig4, fig.align = "left", fig.width=12, fig.height=5}
+
+# data fig4
+data_f4 <- data %>%
+  dplyr::select(`Duration (s) arm 3`,group,no,gender) %>%
+  rename("arm_3" = `Duration (s) arm 3`) %>%
+  mutate("arm_3" = as.numeric(arm_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "arm", value = "dur", -group, -no, -gender)  
+
+################################# 
+# stat fig4a
+stat_4a <- data_f4 %>%
+  group_by(arm) %>%
+  wilcox_test(dur ~ group,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")   
+  
+# p_values_df <- data.frame(
+#   group1 = "WT", 
+#   group2 = "PM",# Ensure these are correct factor levels
+#   p.value = 0.85,
+#   p.signif = "ns"
+# )
+
+# plot fig4a
+fig4a <- ggplot(data_f4, aes(x = group, y = dur, color = group)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+  coord_cartesian(ylim=c(0,130)) +
+  labs(title="Time spent exploring arm 3 during noval phase", x="", y = "Duration of time (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+#  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=0, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_4a, label = "p.signif", tip.length = 0.02)
+#+
+#  stat_pvalue_manual(p_values_df,label = "p.signif", xmin = "group1", xmax="group2",y.position = 210)
+
+#fig4a 
+
+################################# 
+# stat fig4b
+stat_4b <- data_f4 %>%
+  group_by(group) %>%
+  wilcox_test(dur ~ gender,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")   
+  
+# plot fig4b
+fig4b <- ggplot(data_f4, aes(x = group, y = dur, color = gender)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+  coord_cartesian(ylim=c(0,130)) +
+  labs(title="Time spent exploring arm 3 during noval phase", x="", y = "Duration of time (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=0, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_4b, label = "p.signif", tip.length = 0.02)
+
+#fig4b
+
+################################# 
+# arrange plots into a grid with automatic sublabels (A,B)
+fig4 <- ggarrange(fig4a, fig4b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig4
+
+```
+
+__Figure 4.__ Time spent exploring arm 3 during noval phase between groups (A) and between gender within group (B). 
+
+__Statistics for Figure 4 A (between groups)__
+
+```{r stat4a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_4a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 4 B (between gender)__
+
+```{r stat4b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_4b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### No. of visits to the arm 3 during novel phase
+
+```{r fig5, fig.align = "left", fig.width=12, fig.height=5}
+
+# data fig5
+data_f5 <- data %>%
+  dplyr::select(`Visits arm 3`,group,no,gender) %>%
+  rename("visits_3" = `Visits arm 3`) %>%
+  mutate("visits_3" = as.numeric(visits_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "arm3", value = "visits", -group, -no, -gender)  
+
+################################# 
+# stat fig5a
+stat_5a <- data_f5 %>%
+  wilcox_test(visits ~ group,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group") 
+
+# plot fig5a
+fig5a <- ggplot(data_f5, aes(x = group, y = visits, color = group)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+#  coord_cartesian(ylim=c(0,14)) +
+  labs(title="Number of visits to arm 3", x="", y = "Count") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5a, label = "p.signif", tip.length = 0.02)
+
+#fig5a 
+
+################################# 
+# stat fig5b
+stat_5b <- data_f5 %>%
+  group_by(group) %>%
+  wilcox_test(visits ~ gender,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")   
+  
+# plot fig5b
+fig5b <- ggplot(data_f5, aes(x = group, y = visits, color = gender)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+#  coord_cartesian(ylim=c(0,14)) +
+  labs(title="Number of visits to arm 3", x="", y = "Visits count") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=1, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +    
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_5b, label = "p.signif", tip.length = 0.02)
+
+#fig5b
+
+################################# 
+# arrange plots into a grid with automatic sublabels (A,B)
+fig5 <- ggarrange(fig5a, fig5b, labels="AUTO", ncol=2, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig5
+
+```
+
+__Figure 5.__ Number of visits to the arm 3 during noval phase between groups (A) and between gender within group (B).
+
+__Statistics for Figure 5 A (between groups)__
+
+```{r stat5a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 5 B (between gender)__
+
+```{r stat5b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_5b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Cohorts comparison within groups
+
+```{r fig6, fig.align = "left", fig.width=15, fig.height=5}
+
+# plot fig6a
+pl_6a = data_f1 %>%
+#  ggplot(aes(x=cohort, fill=correct_entry)) +  
+  ggplot(aes(x=correct_entry, fill=cohort)) +
+  geom_bar(position="dodge") + 
+  facet_grid (~group) +   
+#  coord_cartesian(ylim=c(0,9)) +
+  labs(title="Correct first attempt", x="", y = "Counts") + 
+  theme_classic() +
+  theme_pubr() +
+  geom_text(stat='count', 
+            aes(label=after_stat(count)), 
+            position = position_dodge(0.9),
+            vjust = -0.08) + 
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_6a
+
+################################# 
+
+# data fig6b
+data_f6b <- data %>%
+  dplyr::select(`Duration (s) arm 3`,group,no,gender,cohort) %>%
+  rename("arm_3" = `Duration (s) arm 3`) %>%
+  mutate("arm_3" = as.numeric(arm_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "arm", value = "dur", -group, -no, -gender,-cohort)  
+
+# stat fig6b
+stat_6b <- data_f6b %>%
+  group_by(group) %>%
+  wilcox_test(dur ~ cohort,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")   
+  
+# plot fig4b
+fig6b <- ggplot(data_f6b, aes(x = group, y = dur, color = cohort)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+  coord_cartesian(ylim=c(0,125)) +
+  labs(title="Time spent exploring arm 3 during noval phase", x="", y = "Duration of time (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=0, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +  
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_6b, label = "p.signif", tip.length = 0.02)
+
+#fig6b
+
+################################# 
+
+# data fig6c
+data_f6c <- data %>%
+  dplyr::select(`Visits arm 3`,group,no,gender,cohort) %>%
+  rename("visits_3" = `Visits arm 3`) %>%
+  mutate("visits_3" = as.numeric(visits_3)) %>%
+  filter(no == "Sum") %>%
+  gather(key = "arm3", value = "visits", -group, -no, -gender,-cohort)  
+
+# stat fig6c
+stat_6c <- data_f6c %>%
+  group_by(group) %>%
+  wilcox_test(visits ~ cohort,exact=FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")   
+  
+# plot fig6c
+fig6c <- ggplot(data_f6c, aes(x = group, y = visits, color = cohort)) +
+  geom_boxplot() +
+#  facet_wrap(~group) +
+  geom_point(position = position_jitterdodge(dodge.width = 0.5), size = 1.5) +
+#  coord_cartesian(ylim=c(0,14)) +
+  labs(title="Number of visits to arm 3", x="", y = "Visits count") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y=2, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +    
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_6c, label = "p.signif", tip.length = 0.02)
+
+#fig6c
+
+################################# 
+# arrange plots into a grid with automatic sublabels (A,B)
+fig6 <- ggarrange(pl_6a, fig6b, fig6c, labels="AUTO", ncol=3, nrow=1, common.legend=FALSE, legend = "bottom") 
+
+fig6
+
+```
+
+__Figure 6.__ Comparison of cohorts within groups. (A) Correct choice in first attempt, (B) Time spent exploring arm 3 during noval phase, (C) Number of visits to the arm 3 during noval phase. 
+
+__Statistics for Figure 6 B (between cohorts)__
+
+```{r stat6b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_6b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 6 C (between cohorts)__
+s
+```{r stat6c, echo=F}
+
+#create a tibble to collect all stats
+
+stat_6c %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+*********
+
+### Conclusion
+
+*********

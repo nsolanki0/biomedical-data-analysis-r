@@ -1,0 +1,489 @@
+---
+title: "Rotarod test analysis"
+author: ""
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+    # knit to PDF works if df_print:kable in enabled
+    # there is a bug with the current kable version, but it can be updated via:
+    # remotes::install_github('rstudio/rmarkdown')
+    # But the Computer refuses to connect to github:
+    # Error: Failed to install 'rmarkdown' from GitHub:
+    # Failed to connect to api.github.com port 443: Connection refused
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+    
+#output:
+#  pdf_document:
+#    fig_caption: yes
+#    number_sections: yes
+#    toc: yes
+#    df_print: kable
+#  html_document:
+#    df_print: kable
+#    toc: yes
+#    toc_float:
+#      collapsed: false
+#    number_sections: yes
+#    theme: cosmo
+#mainfont: palatino
+#geometry: "left=3cm,right=3cm,top=2cm,bottom=4cm"
+#header-includes:
+#    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+# Empty global environment
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticaly created path the option to look for libraries in "C:/R/library" 
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+library(tinytex)
+library(knitr)
+#library(ggsignif)
+library(rstatix)
+
+```
+
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+\newpage
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file. 
+-->
+
+<!-- 
+ABOUT THIS SCRIPT:
+
+title: Rotarod test analysis
+developed by: Narendra Solanki (NS)
+last update: 13.06.2025
+
+TSE Software:
+This script directly takes the output data of TSE Software 
+and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+The script has the following parts:
+
+# LOAD DATA section:
+  - loads the data and tidies it up into a polished "data" data frame
+  
+  - this section is always individualized for the specific project
+  depending on the differences in file names, etc.
+  
+  - first, MAKE SURE the current directory is up-to-date
+  and corresponds to the project folder, which has a data folder.
+  Adjust the file name and the script will automatically load the data from this folder.
+
+# All the following analysis sections are general.
+
+-->
+
+## Rotarod Analysis
+
+### Experimental conditions
+
+2 groups of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Test\analysis\Rotarod` 
+
+Data: 
+ 
+`Rotarod_1.CSV`    
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\6. Data from Behavioral Test\Rotarod`    
+
+### Data Quality:  
+->All data can be used. 
+
+```{r data_loading}
+
+# Empty global environment
+rm(list = ls())
+
+### 1.0 LOAD IN DATA ----------------------------------------------------------
+
+# load data
+raw_data_file <- "~\\6. Data from Behavioral Tests\\rotarod\\Rotarod_1.CSV"
+
+columns_name <- read.table(raw_data_file,skip=16,dec = ",",sep=";")[1,]
+columns_name[1] <- "animal_no"
+
+raw_data <- read.table(raw_data_file,skip=17,dec = ",",sep=";")
+
+colnames(raw_data) <- columns_name
+
+raw_data <- raw_data %>% 
+  mutate(animal_no = as.character(animal_no))
+         
+raw_data$animal_no[raw_data$animal_no == 1995] <- 1915
+
+# load lookup data files
+lookupfile <- "~\\6. Data from Behavioral Tests\\lookup.xlsx"
+
+# read lookup data files
+lookup <- read_excel(paste(lookupfile,sep = ""))
+
+lookup <- lookup %>% 
+  mutate(animal_no = as.character(`animal number`),
+         cohort = as.character(cohort)) 
+
+# combine exp data with lookup data
+data <- full_join(raw_data,lookup , by= "animal_no")
+
+data$cohort <- as.numeric(data$cohort)
+
+# need to be factor for later stat analysis
+data <- data %>%
+  mutate(group = factor(group),
+         cohort = factor(cohort),
+         gender = factor(sex))
+
+data <- data %>%
+   dplyr::select(animal_no, cohort, gender, group, Sec, rpm, m)
+                 
+# data_new <- data %>%
+#   group_by(animal_no) %>%
+#   mutate(mean_sec = mean(Sec, na.rm = TRUE))  
+
+summary_data <- data %>%
+  group_by(animal_no,cohort,gender,group) %>%  
+  summarise(mean_sec = mean(Sec, na.rm = TRUE),
+            mean_rpm = mean(rpm, na.rm = TRUE),
+            mean_m = mean(m, na.rm = TRUE))
+
+#lapply(summary_data,class)
+
+#names(summary_data)
+
+```
+\newpage
+
+### Results
+
+#### Time spent on Rod
+
+```{r fig1, fig.align = "left", fig.width=9, fig.height=4}
+
+# stats fig1a
+stat_1a <- summary_data %>%
+  ungroup() %>%
+  mutate(group = droplevels(group)) %>%  # Drop unused factor levels
+  wilcox_test(mean_sec ~ group, exact = FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig1a
+pl_1a <- summary_data %>%
+  ggplot(aes(x = group, y = mean_sec, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Total time on rod (s)", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_1a, label = "p.signif", tip.length = 0.02)
+
+#pl_1a
+
+################################# 
+
+# stats fig1b
+stat_1b <- summary_data %>%
+  group_by(group) %>%
+  wilcox_test(mean_sec ~ gender, exact = FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig1b
+pl_1b <- summary_data %>%
+  ggplot(aes(x = group, y = mean_sec, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Total time on rod (s)", x="", y = "Time (s)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +   
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_1b, label = "p.signif", tip.length = 0.02)
+
+#pl_1b
+
+#################################  
+
+# arrange plots into a grid with automatic sublabels (A,B)
+fig1 <- ggarrange(pl_1a, pl_1b, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+fig1
+
+```
+
+__Figure 1.__ Total time (s) on rod between groups (A) and between gender within group (B).
+
+__Statistics for Figure 1 A (between groups)__
+
+```{r stat_1a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%  
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 1 B (between gender)__
+
+```{r stat_1b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_1b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+\newpage
+
+#### Average RPM reached
+
+```{r fig2, fig.align = "left", fig.width=9, fig.height=4}
+
+# stats fig2a
+stat_2a <- summary_data %>%
+  ungroup() %>%
+  mutate(group = droplevels(group)) %>%  # drop unused factor levels
+  wilcox_test(mean_rpm ~ group, exact = FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig2a
+pl_2a <- summary_data %>%
+  ggplot(aes(x = group, y = mean_rpm, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Average rpm", x="", y = "rpm") + 
+  theme_classic() +
+  # theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2a, label = "p.signif", tip.length = 0.02)
+
+#pl_2a 
+
+#################################
+
+# stats fig1d
+stat_2b <- summary_data %>%
+  group_by(group) %>%
+  wilcox_test(mean_rpm ~ gender, exact = FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig2b
+pl_2b <- summary_data %>%
+  ggplot(aes(x = group, y = mean_rpm, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Average rpm", x="", y = "rpm") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +   
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_2b, label = "p.signif", tip.length = 0.02)
+
+#pl_2b
+
+#################################
+
+# arrange plots into a grid with automatic sublabels (A,B)
+fig2 <- ggarrange(pl_2a, pl_2b, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+fig2
+
+```
+__Figure 2.__ Average rmp reached, between groups (A) and between gender within group (B).
+
+__Statistics for Figure 2 A (between groups)__
+
+```{r stat_2a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>%  
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 2 B (between gender)__
+
+```{r stat_2b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_2b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+\newpage
+
+#### Distance traveled in meters
+
+```{r fig3, fig.align = "left", fig.width=9, fig.height=4}
+
+# stats fig3a
+stat_3a <- summary_data %>%
+  ungroup() %>%
+  mutate(group = droplevels(group)) %>%  # Drop unused factor levels
+  wilcox_test(mean_m ~ group, exact = FALSE) %>%
+  add_significance("p") %>%  
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig3a
+pl_3a <- summary_data %>%
+  ggplot(aes(x = group, y = mean_m, color = group, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Distance traveled (m)", x="", y = "Distance (m)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3a, label = "p.signif", tip.length = 0.02)
+
+#pl_3a  
+
+#################################
+
+# stats fig3b
+stat_3b <- summary_data %>%
+  group_by(group) %>%
+  wilcox_test(mean_m ~ gender, exact = FALSE) %>%
+  add_significance("p") %>%
+  add_xy_position(x = "group")  # needs to be included
+
+# plot fig3b
+pl_3b <- summary_data %>%
+  ggplot(aes(x = group, y = mean_m, color = gender, label = "")) +
+  geom_boxplot() + 
+  geom_point(position=position_jitter(w=0.2, h=0.2)) +  
+#  coord_cartesian(ylim=c(3000,10500)) +
+  labs(title="Distance traveled (m)", x="", y = "Distance (m)") + 
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  geom_text(aes(y = after_stat(count), label=after_stat(count)), stat="count", y = 0, position = position_dodge(width = 0.95,), size=4, show.legend = FALSE) +   
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) +
+  stat_pvalue_manual(stat_3b, label = "p.signif", tip.length = 0.02)
+
+#pl_3b  
+
+#################################  
+
+# arrange plots into a grid with automatic sublabels (A,B)
+fig3 <- ggarrange(pl_3a, pl_3b, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+fig3
+
+```
+__Figure 3.__ Distance traveled (m) between groups (A) and between gender within group (B).
+
+__Statistics for Figure 3 A (between groups)__
+
+```{r stat_3a, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3a %>%
+  dplyr::select(-y.position,-groups,-xmin,-xmax) %>% 
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics for Figure 3 B (between gender)__
+
+```{r stat_3b, echo=F}
+
+#create a tibble to collect all stats
+
+stat_3b %>%
+  dplyr::select(-y.position,-groups,-x,-xmin,-xmax) %>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+*********
+
+### Conclusion
+
+*********

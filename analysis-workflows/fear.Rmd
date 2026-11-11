@@ -1,0 +1,674 @@
+---
+title: "Contextual and Cued Fear conditionning - analysis (All Cohorts)"
+author: ""
+output: 
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: false
+    number_sections: yes
+    theme: cosmo
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+mainfont: palatino
+geometry: "left=2cm,right=3cm,top=2cm,bottom=4cm"
+header-includes:
+    - \usepackage{fancyhdr}
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F, fig.align="center")
+#knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(kableExtra)
+library(EnvStats)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+<!-- 
+Sections above need to be cut off or commented 
+if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: Fear Test Analysis 
+author: Narendra Solanki (NS)
+last update: 01.03.2024
+
+#-description procedure:
+#### Phase 1: 4 steps (habituation to context/tone/E-chock[reaction expected]/pause=habituation)
+#### Phase 2: 1 step (habituation) <-CONTEXT conditioning?
+#### Phase 3: 2 steps (habituation new env /tone) <-CUE CONDITIONNING
+#### +5 days
+#### Phase 4: 1 step (habituation) <-LG terme CONTEXT conditioning?
+#### Phase 5: 2 steps (habituation new env /tone) <-LG terme CUE CONDITIONNING
+
+#-columns of interest:
+#  (Dis.)   Distance traveled (cm?)
+#  (Rear)   Total number of rearing bouts
+#  (FreXY)  Total number of freezing bouts
+#  (FreDXY) Total duration of all freezing bouts
+#  (Jump)   Total number of Jumping bouts
+
+#-parameters
+#  Phase 1 - part 3 (E-Stim): CONTROL - all animal Jump (at least once) means they felt the E-stim
+#All parts of phase 1-> expect to see a jump at part3
+
+#  Phase 2 - part 1 (CONTEXT): Dist., freXY, freDXY
+#  Phase 4 - part 1 (CONTEXT): Dist., freXY, freDXY
+#decrease of freezing ?
+
+#  Phase 3 - part 1 to 2  (CUE): Dist., freXY, freDXY
+#increase of freezing between parts (when tone heard?)
+
+#  Phase 5 - part 1 to 2  (CUE): Dist., freXY, freDXY
+#increase of freezing between parts (when tone heard?)
+#Curzon et al. 2009:  It has been shown that exposing rodents to foot shock will sometimes produce generalized, or nonassociative freezing to unconditioned stimuli, such as when placed in a novel environment. n our experience, we can see increased freezing to the tone stimulus in the novel environment in animals that have received contextual conditioning, i.e., those that have not been exposed to the tone during conditioning.
+
+### AOCF MANUAL => number of freezing bouts, distance traveled, total time spent freezing
+
+-->
+
+\newpage
+
+## FEAR
+
+```{r setup, include=FALSE}
+
+# change to data directory
+knitr::opts_knit$set(root.dir = "~\\6. Data from Behavioral Tests\\L6b_FEAR\\")
+
+getwd()
+
+```
+
+
+```{r, include=FALSE}
+getwd()
+```
+
+```{r fear_load_data_c123}
+
+#--------------------------- 1. Manual Entries -----------------------------#
+
+#---------------------------LOAD DATA-----------------------------#
+# Load lookup data files
+lookupfile <- choose.files()  # "fear look up file_new.xlsx"
+
+# Read lookup data files
+lookup <- read_excel(paste(lookupfile,sep = ""))
+names (lookup)[1] <- "Animal"
+lookup <- lookup %>% 
+  mutate(Animal = as.character(Animal),
+         cohort = as.character(cohort)) 
+
+# cohort 1
+cohort1 <- choose.files()     
+data1 <- read.csv(cohort1, header=T, skip=1, sep =";", dec = ",")
+data1 <- data1[-1,]
+data1$cohort <- "1"
+data1 <- data1 %>% 
+  mutate(Animal = as.character(Animal)) 
+
+data1 <- data1 %>% 
+  mutate(Animal=str_replace(Animal,"114", "14"),
+         Animal=str_replace(Animal,"115", "15"),
+         Animal=str_replace(Animal,"1104", "104"),
+         Animal=str_replace(Animal,"120", "20"),
+         Animal=str_replace(Animal,"144", "44"),
+         Animal=str_replace(Animal,"151", "51"),
+         Animal=str_replace(Animal,"1105", "105"),
+         Animal=str_replace(Animal,"1631", "631"),
+         Animal=str_replace(Animal,"117", "17"),
+         Animal=str_replace(Animal,"112", "12"))
+
+#write.xlsx(data1, "feardata.xlsx", sheetName = "Sheet1", 
+#  col.names = TRUE, row.names = TRUE, append = FALSE)
+
+# cohort 2
+cohort2 <- choose.files()    
+data2 <- read.csv(cohort2, header=T, skip=1, sep =";", dec = ",")
+data2 <- data2[-1,]
+data2$cohort <- "2"
+data2 <- data2 %>% 
+  mutate(Animal = as.character(Animal)) 
+
+data2 <- data2 %>% 
+  mutate(Animal=str_replace(Animal,"110", "10"),
+         Animal=str_replace(Animal,"111", "11"),
+         Animal=str_replace(Animal,"190", "90"),
+         Animal=str_replace(Animal,"145", "45"),
+         Animal=str_replace(Animal,"414", "214"),
+         Animal=str_replace(Animal,"193", "93"),
+         Animal=str_replace(Animal,"189", "89"),
+         Animal=str_replace(Animal,"119", "19"),
+         Animal=str_replace(Animal,"116", "16"),         
+         Animal=str_replace(Animal,"136", "36"),
+         Animal=str_replace(Animal,"140", "40"))
+
+# cohort 3
+cohort3 <- choose.files()     
+data3 <- read.csv(cohort3, header=T, skip=1, sep =";", dec = ",")
+data3 <- data3[-1,]
+data3$cohort <- "3"
+data3 <- data3 %>% 
+  mutate(Animal = as.character(Animal)) 
+
+data3 <- data3 %>% 
+  mutate(Animal=str_replace(Animal,"374", "74"),
+         Animal=str_replace(Animal,"453", "53"),
+         Animal=str_replace(Animal,"372", "72"),
+         Animal=str_replace(Animal,"375", "75"),
+         Animal=str_replace(Animal,"376", "76"),
+         Animal=str_replace(Animal,"378", "78"),
+         Animal=str_replace(Animal,"359", "59"),
+         Animal=str_replace(Animal,"362", "62"),
+         Animal=str_replace(Animal,"3101", "101"),
+         Animal=str_replace(Animal,"452", "52"))
+
+# Create data file with all cohort data
+list_df123 <- list(data1, data2, data3)
+data123 <- list_df123 %>% reduce(full_join, by=NULL)
+
+# combine exp data with lookup data
+#data_fr <- full_join(data1,lookup , by= c("cohort", "Animal"))
+data_fr <- full_join(data123,lookup , by= c("cohort", "Animal"))
+data_fr$cohort <- as.numeric(data_fr$cohort)
+
+# need genotype to be factor for later stat analysis
+data <- data_fr %>% mutate(geno = as.factor(genotype)) 
+
+## Extract relevant data
+# A.  Reaction to E-stim in phase 1
+fear.p1 <- subset(data, Phase=='1')
+fear.p1 <- fear.p1 %>% 
+  select (Animal, geno, Phase, Part, Jump, Dis., FreXY, cohort) %>%
+  mutate(Part=str_replace(Part,"1", "1.Habituation"),
+         Part=str_replace(Part,"2", "2.Tone"),
+         Part=str_replace(Part,"3", "3.E-stim"),
+         Part=str_replace(Part,"4", "4.Pause"))
+
+# B.  CONTEXT Conditionning
+fear.ctx <- data %>%
+  filter(Phase !="1", Phase !="3",Phase !="5") %>% #select lines
+  select (Animal, geno, Phase, Part, Dis., FreXY, FreDXY, cohort) %>% #select columns
+  mutate(Phase=str_replace(Phase,"2", "d2"),
+         Phase=str_replace(Phase,"4", "d7"))
+
+# C.1.  CUE Conditionning d2
+fear.cue.d2 <- data %>% 
+  filter(Phase !="1", Phase !="2",Phase !="4", Phase !="5") %>% #select lines
+  select (Animal, geno, Phase, Part, Dis., FreXY, FreDXY, cohort) %>% #select columns
+  mutate(Phase=str_replace(Phase,"3", "d2"),
+         Part=str_replace(Part,"1", "ctx"),
+         Part=str_replace(Part,"2", "cue")) 
+
+# C.2.  CUE Conditionning d7
+fear.cue.d7 <- data %>% 
+  filter(Phase !="1", Phase !="2",Phase !="4", Phase !="3") %>% #select lines
+  select (Animal, geno, Phase, Part, Dis., FreXY, FreDXY, cohort) %>% #select columns
+  mutate(Phase=str_replace(Phase,"5", "d7"),
+         Part=str_replace(Part,"1", "ctx"),
+         Part=str_replace(Part,"2", "cue"))
+
+```
+
+
+```{r stat_func, echo=F}
+
+# list of gender
+list_of_genders <- c("F", "M")
+list_of_genders <- as.factor(list_of_genders)
+
+# list of phases
+list_of_phases <- as.factor(c("d2", "d7"))
+
+# list of parts
+list_of_parts <- as.factor(c("ctx", "cue"))
+
+# list of genotypes
+list_of_genotypes <- c("Cre+", "hM4D+", "WT") 
+
+# BETWEEN GENOTYPES for ctx
+stats_ctx_bgeno <- function(data, parameter, info_text, grouping_factor="geno") {
+ 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))
+    
+  for (i in 1:length(list_of_phases)) {
+    stat_data <- df %>%
+      filter(Phase == list_of_phases[i])
+  
+    # perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+        st = tidy(pairwise.wilcox.test(stat_data$param, stat_data$group, p.adjust.methods = "BH", exact = FALSE)) %>%          
+       mutate(method = "Pairwise Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between genotypes for phase", list_of_phases[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+  }
+return(stats)
+}
+
+# BETWEEN GENOTYPES for cue
+stats_cue_bgeno <- function(data, parameter, info_text, grouping_factor="geno") {
+ 
+  #create a tibble to collect all stats
+  stats = tibble()
+  
+  df <- data %>%
+    rename(param = all_of(parameter),
+           group = all_of(grouping_factor))
+    
+  for (i in 1:length(list_of_parts)) {
+    stat_data <- df %>%
+      filter(Part == list_of_parts[i])
+  
+    # perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+        st = tidy(pairwise.wilcox.test(stat_data$param, stat_data$group, p.adjust.methods = "BH", exact = FALSE)) %>%          
+       mutate(method = "Pairwise Wilcoxon Sum",
+              variable = info_text,
+              test = paste("between genotypes for", list_of_parts[i]), 
+              sign = ifelse(p.value < 0.05, "*", ""))
+ 
+  #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+  }
+return(stats)
+}
+
+```
+
+### Experimental Conditions
+
+3 cohorts of mice:
+
+LOG DATA: _No Crash of the system, all data can be used_
+
+-> all data can be used    
+
+Path to all Raw data files: `~\6. Data from Behavioral Tests\FEAR`  
+
+The analysis of the data is done in this Rmd file directly.  
+
+Path to Report: `~\6. Data from Behavioral Tests\FEAR`   
+<!-- in "data" folder: All files.      -->
+
+### Data Quality:  
+->All data can be used.  
+
+\newpage
+
+### Results
+
+#### Phase 1 Conditioning (All Cohorts)
+
+```{r boxplot_fear_cond_geno, fig.width = 10, fig.height = 11.5}
+
+## Phase 1 (conditioning)
+
+# Jump
+pl.j.p1 <- fear.p1 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=Jump, color = factor(geno))) +  
+  geom_boxplot() +
+  facet_grid (~factor(Part)) +
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="Conditioning steps", y="Jumping bouts", title = "Jumping in phase 1") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.j.p1
+
+# Distance
+pl.dis.p1 <- fear.p1 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=Dis., color = factor(geno))) +   
+  geom_boxplot() +
+  facet_grid (~factor(Part)) +
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="Conditioning steps", y="Distance traveled (cm)", title = "Distance traveled in phase 1") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.dis.p1
+
+# Freezing
+pl.freez.p1 <- fear.p1 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreXY, color = factor(geno))) + 
+  geom_boxplot() +
+  facet_grid (~factor(Part)) +
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="Conditioning steps", y="Freezing bouts", title = "Freezing in phase 1") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.freez.p1
+
+# Create a grid with plots
+option_ribbon1 <- ggarrange(pl.dis.p1, pl.j.p1,  pl.freez.p1, 
+                               ncol = 1, nrow = 3,
+                               common.legend = TRUE, legend = "bottom", labels = "AUTO")
+
+Fig1 <- option_ribbon1
+
+Fig1
+
+```
+
+**Figure 1. A Distance traveled (cm) per genotype, B Jumping bouts per genotype and C Freezing bouts per genotype in Phase 1 per Part (Habituation, Tone, E-stim and Pause).**
+
+\newpage
+
+#### Context Conditioning (All Cohorts)
+
+```{r boxplot_fear_context_cond_geno, fig.width = 10, fig.height = 11.5}
+
+## Context conditioning
+
+# Freezing bouts
+pl.cx.freez <- fear.ctx %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreXY, color = factor(geno))) +   
+#  ggplot(aes(x=factor(Part), y=Dis., color = factor(geno))) +
+  geom_boxplot() +
+#  facet_grid (~factor(Part)) +
+  facet_grid (~Phase) +  
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing bouts", title = "Freezing bouts in CONTEXT") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cx.freez
+
+# Freezing duration
+pl.cx.dfreez <- fear.ctx %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreDXY, color = factor(geno))) +   
+#  ggplot(aes(x=factor(Part), y=Dis., color = factor(geno))) +
+  geom_boxplot() +
+#  facet_grid (~factor(Part)) +
+  facet_grid (~Phase) +  
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing duration (s)", title = "Freezing duration in CONTEXT") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cx.dfreez
+
+# Distance traveled
+pl.cx.dis <- fear.ctx %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=Dis., color = factor(geno))) +   
+#  ggplot(aes(x=factor(Part), y=Dis., color = factor(geno))) +
+  geom_boxplot() +
+#  facet_grid (~factor(Part)) +
+  facet_grid (~Phase) +  
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Distance traveled (cm)", title = "Distance traveled in CONTEXT") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cx.dis
+
+# Create a grid with plots
+option_ribbon2 <- ggarrange(pl.cx.freez, pl.cx.dfreez, pl.cx.dis, 
+                               ncol = 1, nrow = 3,
+                               common.legend = TRUE, legend = "bottom", labels = "AUTO")
+
+Fig2 <- option_ribbon2
+
+Fig2
+
+```
+**Figure 2. A Freezing bouts per genotype, B Freezing duration (s) per genotype and C Distance traveled (cm) per genotype, during contex in Phase 2 (day 2) and Phase 4 (day 7) respectively.**
+
+\newpage
+
+__Statistics for Figure 2__
+
+```{r fear_stats_fig2, fig.width = 10, fig.height = 10}
+
+## BETWEEN GENOTYPES difference
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_2
+stats_fig2_A <- stats_ctx_bgeno(pl.cx.freez$data, "FreXY", "Fig 2 A, freez bouts") 
+stats = bind_rows(stats, stats_fig2_A)
+
+stats_fig2_B <- stats_ctx_bgeno(pl.cx.dfreez$data, "FreDXY", "Fig 2 B, freez dur (s)") 
+stats = bind_rows(stats, stats_fig2_B)
+
+stats_fig2_C <- stats_ctx_bgeno(pl.cx.dis$data, "Dis.", "Fig 2 C, dist. (cm)") 
+stats = bind_rows(stats, stats_fig2_C)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+#### Cue Conditioning (All Cohorts)
+
+```{r boxplot_fear_cue_cond_geno, fig.width = 10, fig.height = 11.5}
+
+## Cue conditioning
+
+# Freezing duration day 2
+pl.cue.d2.dur <- fear.cue.d2 %>%
+#  filter(cohort==1) %>% 
+  ggplot(aes(x=factor(geno), y=FreDXY, color = factor(geno))) +
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing duration (s)", title = "Freezing duration at CUE - day 2") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d2.dur
+
+# Freezing duration day 7
+pl.cue.d7.dur <- fear.cue.d7 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreDXY, color = factor(geno))) +  
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing duration (s)", title = "Freezing duration at CUE - day 7") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d7.dur
+
+# Freezing bouts day 2
+pl.cue.d2.f <- fear.cue.d2 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreXY, color = factor(geno))) +   
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing bouts", title = "Freezing bouts at CUE - day 2") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d2.f
+
+# Freezing bouts day 7
+pl.cue.d7.f <- fear.cue.d7 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=FreXY, color = factor(geno))) +  
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Freezing bouts", title = "Freezing bouts at CUE - day 7") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d7.f
+
+# Distance traveled day 2
+pl.cue.d2.d <- fear.cue.d2 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=Dis., color = factor(geno))) +   
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Distance traveled (cm)", title = "Distance traveled at CUE - day 2") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d2.d
+
+# Distance traveled day 7
+pl.cue.d7.d <- fear.cue.d7 %>%
+#  filter(cohort==1) %>%
+  ggplot(aes(x=factor(geno), y=Dis., color = factor(geno))) +  
+  geom_boxplot() +
+  facet_grid (~factor(Part)) + 
+  geom_point(aes(colour = factor(geno)),
+             position=position_jitter(w=0.2, h=0.2)) +
+  labs(x="", y="Distance traveled (cm)", title = "Distance traveled at CUE - day 7") +
+  theme_classic() +
+  theme_pubr() +
+  stat_n_text() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+#pl.cue.d7.d
+
+# Create a grid with plots
+option_ribbon3 <- ggarrange(pl.cue.d2.dur, pl.cue.d7.dur, pl.cue.d2.f, pl.cue.d7.f,pl.cue.d2.d, pl.cue.d7.d, 
+                               ncol = 2, nrow = 3,
+                               common.legend = TRUE, legend = "bottom", labels = "AUTO")
+
+Fig3 <- option_ribbon3
+
+Fig3
+
+```
+**Figure 3. A & B Freezing duration (s) per genotype C & D Freezing bouts per genotype,  and C Distance traveled (cm) per genotype, during context and cue, in Phase 3 (day 2) and Phase 5 (day 7) respectively.**
+
+\newpage
+
+__Statistics for Figure 3__
+
+```{r fear_stats_fig3, fig.width = 10, fig.height = 10}
+
+## BETWEEN GENOTYPES difference
+
+#create a tibble to collect all stats
+stats = tibble()
+
+
+#Fig_2
+stats_fig3_A <- stats_cue_bgeno(pl.cue.d2.dur$data, "FreDXY", "Fig 3 A, freez dur (s)") 
+stats = bind_rows(stats, stats_fig3_A)
+
+stats_fig3_B <- stats_cue_bgeno(pl.cue.d7.dur$data, "FreDXY", "Fig 3 B, freez dur (s)") 
+stats = bind_rows(stats, stats_fig3_B)
+
+stats_fig3_C <- stats_cue_bgeno(pl.cue.d2.f$data, "FreXY", "Fig 3 C, freez bouts") 
+stats = bind_rows(stats, stats_fig3_C)
+
+stats_fig3_D <- stats_cue_bgeno(pl.cue.d7.f$data, "FreXY", "Fig 3 D, freez bouts") 
+stats = bind_rows(stats, stats_fig3_D)
+
+stats_fig3_E <- stats_cue_bgeno(pl.cue.d2.d$data, "Dis.", "Fig 3 E, dist. (cm)") 
+stats = bind_rows(stats, stats_fig3_E)
+
+stats_fig3_F <- stats_cue_bgeno(pl.cue.d7.d$data, "Dis.", "Fig 3 F, dist. (cm)") 
+stats = bind_rows(stats, stats_fig3_F)
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+******
+
+### Conclusion
+
+******

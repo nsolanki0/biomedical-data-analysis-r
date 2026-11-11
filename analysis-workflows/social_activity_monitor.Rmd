@@ -1,0 +1,3084 @@
+---
+title: "SAM"
+author: ""
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    df_print: kable
+  html_document:
+    df_print: kable
+    toc: yes
+    toc_float:
+      collapsed: no
+    number_sections: yes
+    theme: cosmo
+  word_document:
+    toc: yes
+mainfont: palatino
+geometry: left=2cm,right=3cm,top=2cm,bottom=4cm
+header-includes: \usepackage{fancyhdr}
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# set default values for chunk options for the whole document
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+#clear working directory
+rm(list = ls())
+
+#define paths for libraries, here we add to the automaticly created path the option to look for libraries in "C:/R/library"
+.libPaths(c(.libPaths(), "C:/R/library"))
+
+#import libraries
+library(tidyverse)
+library(grid)
+library(readr)
+library(readxl)
+library(ggpubr)
+library(broom)
+library(randomcoloR)
+library(gtable)
+library(ggrepel)
+library(ggpubr)
+library(tinytex)
+library(EnvStats)
+library(kableExtra)
+library(lubridate)
+require(magrittr)
+#library(lmPerm)
+library(lmerTest)
+library(multcomp)
+library(MCMCglmm)
+
+```
+
+<!-- General Page-formatting -->
+\addtolength{\headheight}{1.0cm} 
+\pagestyle{fancyplain} 
+<!-- \rhead{\includegraphics[height=2.4cm]{data/Logos_AOCF}}  --> 
+\renewcommand{\headrulewidth}{0pt}
+
+<!-- 
+Sections above need to be cut off or commented if this script is to be used as a child.
+In this case the libraries need to be imported in the main RmD file.
+If this script is to be used individually without a parent file and 
+there is nothing above this comment copy the header and the first 
+code chunk to import libraries from another script and make sure there are no
+libraries missing.
+-->
+
+<!-- 
+#--------------------------- ABOUT THIS SCRIPT: ---------------------------#
+
+title: SAM analysis
+author: Narendra Solanki (NS)
+last update: 17.08.2023 (NS)
+
+This script takes preprocessed data and returns plots and statistical analysis as an RmD.
+It can be run by itself, or used as an R child. 
+
+INPUT DATA       : 
+  Two Options:
+    1. Do the preprocessing within this script:
+                    Raw data (.xlsx file)
+                    lookup.xlsx
+    2. Use data that is already preprocessed
+                    Preprocessed Raw data (.csv file)
+             
+CURRENT SETTINGS : 
+                   
+SECTIONS         :# 1.MANUAL ENTRIES
+                    - In this section adjustments can be made regarding:
+                        > Input files
+                        > project name
+                        > plots (color, theme etc.)
+                        > enter the START DATE and TIME of the FIRST dark phase
+                  
+                  # 2. LOAD DATA:
+                    - loads the data and lookup and tidies it up into a polished "data" data frame
+                      2.1 Relabel individuals
+                      2.2 Convert formats
+                      2.3 Exclude NAs
+                      2.4 Join lookup
+                      2.5 Transform data and create new columns
+                        >cage composition has to be manually adjusted according to the labbook if it is not in the lookup-file already
+                  
+                  # 3. Experimental settings
+                    - Assess roughly the structure of the data (number of individuals in total, per cohort, per strain/treatment or genotype)
+                  
+                  # 4. Data Quality
+                    - check for missing time points
+                    - check for incomplete hours
+                    - exclude data if necessary
+                    
+                  # 5. ANALYSIS
+                    - Statistic Functions
+                    - Results
+                      - Total distance traveled and Mean distance traveled during dark and light phase
+                      - Time series of distance traveled per hour and per phase
+                        (For each section a plot and a statistical analysis is performed)
+                  
+                  # 6. Final conclusions and comments
+
+NOTES             : 
+- This script has been tested on the Project 'X'.
+- The script can be adjusted to work with 2 or 3 treatment groups (or strains) and 1 or 2 cohorts (For an example of 3 groups and 2 cohorts see 'Y').
+- If you work with already preprocessed data you won't need an extra lookup file and you won't need several preprocesssing steps within this script. Indicated sections should be out commented.
+- This script is currently programmed to work with strains, but can be adjusted to work with treatments or genotypes easily:
+    - In Experimental Conditions enter the correct names of data frames to display (e.g. replace 'list_of_strains' by 'list_of_genotypes') the necessary dataframes are created automatically.
+    - For the statistic functions it is possible to give an argument ‘grouping factor’ which should be the name of the column containing the different strains, genotypes or treatments. 
+    - In the plots the correct dataframes have to be selected manually. I recommend to do this using the search and replace function (ctrl + F) in Rstudio.
+
+-->
+
+\newpage
+
+## SAM
+
+__duration Test: 5 astronomical days and 5 bins of 24h__
+
+Although it is called "social activity monitor", the only parameter currently available from this system is an individual index of distance traveled (total, across time (hours or phases of the day)).   
+
+-- __Analysis of the data\:__ This setup gives an index of distance traveled by each (group housed) individual in the home cage over days of recording (total, per hour, per phase). The composition of the cage (mixed-treatment or same-treatment) need to be taken into account as a potential factor influencing the results. Non parametric tests and general linear mixed models can be used for statistical analysis. 
+
+-- __Illustration\:__ Index of distance traveled per group and across hours (curve per group) or boxplots of (averaged) distance traveled per group across dark/light phases, day after day.                    
+```{r setup, include=FALSE}
+
+knitr::opts_knit$set(root.dir = "~/ID grid (SAM)/control data/data from behavior tests")
+
+getwd() 
+
+```
+
+```{r}
+
+getwd()
+
+```
+
+```{r SAM_load_data}
+
+rm(list = ls())
+
+#--------------------------- 1. Manual Entries -----------------------------#
+#1.1 FILES
+# 1.1 INPUT FILES 
+
+file_data_1 = file.choose()   
+file_data_2    = file.choose()  
+file_data_3  = file.choose()   
+file_data_4   = file.choose() 
+
+#1.2 Project name
+
+project <- "HCS_4_groups"
+
+#---------------------------2. LOAD DATA-----------------------------#
+
+#---------------------------2.1 LOAD gr1 DATA-----------------------------#
+
+data_1  <- read_delim(paste(file_data_1, sep=""), delim=",") %>%
+  rename(cohort = tp,
+         gender = Sex) 
+  
+data_1  <- data_1 %>%
+  mutate(PI = str_replace_all(PI, "group1", "gr1"),
+         gender = str_replace_all(gender, "females", "female"),
+         gender = str_replace_all(gender, "males", "male"),
+         cohort = factor(cohort, levels = c(unique(data_1$cohort))))
+
+# check for rows with NAs and exclude them if found
+ex_pten <- data_1[rowSums(is.na(data_1)) > 0,]  
+#ex_pten
+# A tibble: 0 × 13        # NAs not found
+
+#get list of genotypes without NAs if the column 'genotype' exists
+if (!is.na(match('genotype', colnames(data_1)))){
+  list_of_genotypes_pten <- na.omit(unique(data_1$genotype))
+}
+
+# data grouped by cohort,strain and trial and counted
+# This step is to see if we have the same number of observation for all animals
+if(exists('list_of_genotypes_pten')){
+  n_by_genotype_pten = data_1 %>%
+    group_by(cohort,genotype,Animal) %>% 
+    count() %>%
+    rename(obs=n)
+}
+
+#observations per ID per Day
+#obs_perID_perDay_pten = data_1 %>% count(Animal,Date)
+
+# OBSERVATIONS MISSING FROM SOME CASES(see below)
+#> unique(obs_perID_perDay_pten$n)
+#[1] 24 23
+
+#---------------------------2.2 LOAD gr2 DATA-----------------------------#
+
+data_2     <- read_delim(paste(file_data_2, sep=""), delim=",") %>%
+  rename(cohort = tp,
+         gender = sex) 
+
+data_2     <- data_2 %>%    
+  mutate(PI = str_replace_all(PI, "group2", "gr2"),
+         genotype = str_replace_all(genotype, "wt", "WT"),
+         genotype = str_replace_all(genotype, "hom", "KO"),
+         cohort = factor(cohort, levels = c(unique(data_2$cohort))))
+
+# check for rows with NAs and exclude them if found
+ex_pigv <- data_2[rowSums(is.na(data_2)) > 0,]  
+#ex_pigv
+# A tibble: 0 × 13        # NAs not found
+
+#get list of genotypes without NAs if the column 'genotype' exists
+if (!is.na(match('genotype', colnames(data_2)))){
+  list_of_genotypes_pigv <- na.omit(unique(data_2$genotype))
+}
+
+# data grouped by cohort,strain and trial and counted
+# This step is to see if we have the same number of observation for all animals
+if(exists('list_of_genotypes_pigv')){
+  n_by_genotype_pigv = data_2 %>%
+    group_by(cohort,genotype,Animal) %>% 
+    count() %>%
+    rename(obs=n)
+}
+
+#observations per ID per Day
+#obs_perID_perDay_pigv = data_2 %>% count(Animal,Date)
+
+# OBSERVATIONS MISSING FROM SOME CASES(see below)
+#> unique(obs_perID_perDay_pigv$n)
+#[1] 24 23 22
+
+#convert cohort column from numeric class into factor
+#lookup$cohort = factor(lookup$cohort, levels=c(unique(lookup$cohort))) # cohort == tp
+
+#---------------------------2.3 LOAD gr3 DATA-----------------------------#
+
+data_3   <- read_delim(paste(file_data_3, sep=""), delim=",") %>%
+  rename(cohort = tp,
+         gender = sex) 
+
+data_3   <- data_3 %>%
+  mutate(PI = str_replace_all(PI, "group3", "gr3"),
+         genotype = str_replace_all(genotype, "wt", "WT"),
+         genotype = str_replace_all(genotype, "het", "KO"),
+         cohort = factor(cohort, levels = c(unique(data_3$cohort))))
+
+# check for rows with NAs and exclude them if found
+ex_scholl <- data_3[rowSums(is.na(data_3)) > 0,]  
+#ex_scholl
+# A tibble: 0 × 13        # NAs not found
+
+#get list of genotypes without NAs if the column 'genotype' exists
+if (!is.na(match('genotype', colnames(data_3)))){
+  list_of_genotypes_scholl <- na.omit(unique(data_3$genotype))
+}
+
+# data grouped by cohort,strain and trial and counted
+# This step is to see if we have the same number of observation for all animals
+if(exists('list_of_genotypes_scholl')){
+  n_by_genotype_scholl = data_3 %>%
+    group_by(cohort,genotype,Animal) %>% 
+    count() %>%
+    rename(obs=n)
+}
+
+#observations per ID per Day
+#obs_perID_perDay_scholl = data_3 %>% count(Animal,Date)
+
+# OBSERVATIONS MISSING FROM SOME CASES(see below)
+#> unique(obs_perID_perDay_scholl$n)
+#[1] 24 11 14 22 23
+
+#---------------------------2.4 LOAD gr4 DATA-----------------------------#
+
+data_4    <- read_delim(paste(file_data_4, sep=""), delim=",") %>%
+  rename(cohort = tp,
+         gender = sex) 
+
+data_4    <- data_4 %>%
+  mutate(PI = str_replace_all(PI, "group4", "gr4"),
+         genotype = str_replace_all(genotype, "Wt", "WT"),
+         genotype = str_replace_all(genotype, "hom", "KO"),
+         cohort = factor(cohort, levels = c(unique(data_4$cohort))))
+
+# check for rows with NAs and exclude them if found
+ex_pgap3 <- data_4[rowSums(is.na(data_4)) > 0,]  
+#ex_pgap3
+# A tibble: 0 × 13        # NAs not found
+
+#get list of genotypes without NAs if the column 'genotype' exists
+if (!is.na(match('genotype', colnames(data_4)))){
+  list_of_genotypes_pgap3 <- na.omit(unique(data_4$genotype))
+}
+
+# data grouped by cohort,strain and trial and counted
+# This step is to see if we have the same number of observation for all animals
+if(exists('list_of_genotypes_pgap3')){
+  n_by_genotype_pgap3 = data_4 %>%
+    group_by(cohort,genotype,Animal) %>% 
+    count() %>%
+    rename(obs=n)
+}
+
+#observations per ID per Day
+#obs_perID_perDay_pgap3 = data_4 %>% count(Animal,Date)
+
+# OBSERVATIONS MISSING FROM SOME CASES(see below)
+#> unique(obs_perID_perDay_pgap3$n)
+#[1] 24 23
+
+#------------------------2.5 COMBINE ALL gr DATA--------------------------#
+
+# combine all groups to create a single data frame (sam_data_4gr)
+sam_data_4gr <- rbind(data_1, data_2, data_3, data_4)
+
+#----------------------
+
+#---------------------3. EXPERIMENTAL SETTINGS------------------------------#
+
+#get list of projects (PI) without NAs if the column 'PI' exists
+if (!is.na(match('PI',colnames(sam_data_4gr)))){
+  list_of_PIs <- sort(na.omit(unique(sam_data_4gr$PI)))
+}
+
+#get list of gender without NAs if the column 'gender' exists
+if (!is.na(match('gender',colnames(sam_data_4gr)))){
+  list_of_genders <- sort(na.omit(unique(sam_data_4gr$gender)))
+}
+
+```
+
+### Experimental Conditions
+
+<!-- here I call certain entries of the dataframes I created above to be displayed in the output-file -->
+
+1 (gr2 & gr4)  & 2 (gr1 & gr3) cohort of mice:
+
+Number of observations per cohort:            
+(each row in the preprocessed data represents an observation, i.e. the data for one individual for one hour. Hence we expect 24 observations per day per n of mice. Expected total number of observations = (24 * n of days + extra hours) * n of mice) 
+
+LOG DATA:   
+
+Note: Light cycle for the SAM is 6am to 6pm lights on.        
+
+Path to Raw data files: `ID grid (SAM)\control data\data from behavior tests`  
+
+Path to R script for preprocessing and analysis: 
+`ID grid (SAM)\control data\data from behavior tests`
+R script for preprocessing: `SAM_preprocessor_2022.R`         
+<!-- Preprocessor is the script where the new columns are created -->
+R script for analysis: `SAM_4_gr_NS.Rmd`                                   
+
+Preprocessed Data:                         
+`PreProcessed_SAM_group1.csv`              
+`PreProcessed_SAM_group2.csv`
+`PreProcessed_SAM_group3.csv`
+`PreProcessed_SAM_group4.csv`
+After Analytics: `SAM_4_gr_NS.pdf`
+
+### Data quality
+
+Only data from day 1 to 5 are used for the analysis.    
+
+\newpage
+
+### Results
+
+#### Control
+
+##### Distance traveled in SAM for all 4-groups
+\  
+
+`The groups are renamed as follows`,  
+
+`group1 = "gr1"`,  
+`group2 = "gr2"`,  
+`group3 = "gr3"`,  
+`group4 = "gr4"`.  
+
+```{r strain_TOT_Dist_SAM, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = PI, 
+             y = tot.dist, 
+             color = PI)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = PI, 
+             y = avg_distance, 
+             color = PI, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig1 <- ggarrange(pl_dis, pl_dis_lightdark, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+#Fig1 <- ggarrange(pl_dis, pl_dis_lightdark, labels="AUTO", ncol=1, nrow=2, common.legend=F, legend = "bottom")
+
+Fig1
+
+```
+
+__Figure 1 A - Total distance traveled (recorded over 5 experimental days), and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded)__  
+
+__Statistics for Figure 1__
+
+```{r stats_fig_1_A_SAM, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_1A (COMPARISON BETWEEN GROUPS)
+
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(pl_dis$data$tot.dist, pl_dis$data$PI, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           info = "Fig 1A total distance (m)",
+         test = paste("between groups"), 
+         sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+
+#Fig_1B (COMPARISON BETWEEN GROUPS)
+# For the dark phase
+data_d <- filter(pl_dis_lightdark$data, phase == "d")
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(data_d$avg_distance, data_d$PI, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           info = "Fig 1B average distance (m) during dark phase",
+         test = paste("between groups"), 
+         sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+  
+# For the light phase
+data_l <- filter(pl_dis_lightdark$data, phase == "l")
+# perform Pairwise Wilcoxon Rank Sum Tests to compare between group difference
+ st = tidy(pairwise.wilcox.test(data_l$avg_distance, data_l$PI, exact = FALSE, p.adjust.methods="BH")) %>%
+    mutate(method = "Pairwise Wilcoxon Sum",
+           info = "Fig 1B average distance (m) during light phase",
+         test = paste("between groups"), 
+         sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+  
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled for all 4-groups
+
+```{r Dist_SAM, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, color = PI)) + 
+    #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = PI)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = PI), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - 4gr_controls") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly
+
+### Data per phase
+pl_per_day_per_phase <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = PI, 
+             shape = PI)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase
+
+### Data per day
+pl_per_day <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = PI, 
+             shape = PI)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day
+
+pl_mean_per_day_as_line <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = PI, 
+             shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig2 <- ggarrange(pl_hourly, pl_per_day_per_phase,pl_per_day,pl_mean_per_day_as_line, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig2
+
+```
+**Figure 2. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D).**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 2**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: PI/groups, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+# For a detailed description of the MCMCglmm, see 20190423_GLMM_Vladi.pdf in 
+# Z:\AOCF-Test_apparatus information_analysis\Data analysis\data_analyst_EDM\Documentation\Vladi
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig2_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+
+m <- MCMCglmm(distance.m ~ PI + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(fig2_data), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(m)
+
+
+# plot(m)
+# The plots can be interpreted as follows. If the trace (on the left) is a nice
+# caterpillar, we can say the model converged and we can say something about the
+# results. The density plot is the density of the values in the trace. If the 
+# density is a nice bell shape (Gaussian-like) and the value 0 is outside of the 
+# density, we can say there is an effect. 
+
+# Fixed effect interpretation:
+# The intercept is in this case the effect of HOM/dark phase. The other plots are
+# deviations from HOM/dark. So there is no effect of genotype wt (0 is in
+# the density plot).
+# There is an effect of light vs dark and an effect of hours from start. 
+# There is also an effect of time point. 
+
+# Random effects interpretation:
+# There is an effect of id, so there is an effect simply because the animals are 
+# different animals. 
+# Units means any other hidden effects that explain the model. These do not depend on 
+# our data and are generally not discussed.
+
+# Be aware that this technique requires Gaussian data and the data is not
+# completely Gaussian. There are ways to transform the data, but as most of the 
+# model had a good fit on the data, I do not think it is necessary. -EdM
+
+# https://ourcodingclub.github.io/2018/01/22/mcmcglmm.html
+```
+The intercept is in this case the effect of "group gr1/dark phase". The other plots are deviations from gr1/dark phase. So here there is an effect of group and an effect of hours from start. 
+
+<!-- Example of permutation Anova: -->
+```{r Perm_anova_SAM, fig.width = 12, fig.height = 15, echo=F, warnings=F, eval=F}
+
+#Run permutation ANOVA for figure 2 C and D to test if the difference in the observed variance of the dependent variable 'mean distance per day' is attributable to the independent variabels day and genotype as source of variation (Error: Within), while accounting for the variance attributable by individual differences (Animal) in a seperated component (Error: Animal).
+
+##Fig 2C and D:
+#stats_fig = summary(lmPerm::aovp(distance ~ exp_day*PI + Error(Animal), data = pl_per_day$data))
+##save 'Error:Within' from aovp stats in a list named stats
+#stats=stats_fig$`Error: Within` #%>% 
+ # #mutate(sign=ifelse(Pr.Prob. < 0.05, "*", ""))
+
+#stats
+```
+<!-- Permutation ANOVA for figure 2 C and D to test if the difference in the observed variance of the dependent variable 'mean distance per day' is attributable to the independent variables day and genotype as source of variation (Error: Within), while accounting for the variance attributable by individual differences (Animal) in a seperated component (Error: Animal). Displayed is only the Error: Within. The columns indicate from left to right: Degrees of freedom, R-value for total sum of squares (or sum of squared deviations from the mean), R-value for mean squared deviation, the number of iterations, permutation p-value. -->
+
+\newpage
+
+##### Distance traveled in SAM for all 4-groups separated gender wise
+
+```{r strain_TOT_Dist_SAM_gender, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis3 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = PI, 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis3
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark3 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = PI, 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark3
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig3 <- ggarrange(pl_dis3, pl_dis_lightdark3, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig3
+
+```
+
+__Figure 3 A - Total distance traveled (recorded over 5 experimental days) separated gender wise per group, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) separated gender wise per group__  
+
+__Statistics for Figure 3__
+
+```{r stats_fig_1_A_SAM_gender, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_3A (COMPARISON BETWEEN GENDERS WITHIN GROUPS)
+
+pl_dist3 <- pl_dis3$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+for (i in 1:length(list_of_PIs)) {
+  stat_data3 <- pl_dist3 %>%
+    filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data3$tot.dist ~ stat_data3$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 3A total distance (m)",
+           test = paste("between genders for", list_of_PIs[i]), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#Fig_3B (COMPARISON BETWEEN GENDERS WITHIN GROUPS)
+# For the dark phase
+data_d3 <- filter(pl_dis_lightdark3$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+for (i in 1:length(list_of_PIs)) {
+  stat_data3d <- data_d3 %>%
+    filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data3d$avg_distance ~ stat_data3d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 3B average distance (m) during dark phase",
+           test = paste("between genders for", list_of_PIs[i]), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+# For the light phase
+data_l3 <- filter(pl_dis_lightdark3$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+for (i in 1:length(list_of_PIs)) {
+  stat_data3l <- data_l3 %>%
+    filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data3l$avg_distance ~ stat_data3l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 3B average distance (m) during light phase",
+           test = paste("between genders for", list_of_PIs[i]), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled for all 4-groups separated gender wise
+
+```{r Dist_SAM_gender, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly4 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = PI, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - 4gr_controls") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly4
+
+### Data per phase
+pl_per_day_per_phase4 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender, 
+             shape = PI)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase4
+
+### Data per day
+pl_per_day4 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+             shape = PI)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day4
+
+pl_mean_per_day_as_line4 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+             shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line4
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig4 <- ggarrange(pl_hourly4, pl_per_day_per_phase4,pl_per_day4,pl_mean_per_day_as_line4, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig4
+
+```
+
+**Figure 4. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) separated gender wise per group.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 4**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig4_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig4 = tibble()
+
+for (i in 1:length(list_of_PIs)) {
+  stat_data4 <- fig4_data %>%
+    dplyr::filter(PI == list_of_PIs[i])
+  
+  st_x = tibble(res_group = list_of_PIs[i], effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data4), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig4 <- bind_rows(stat_fig4, st_x)
+  }
+
+stat_fig4 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase. 
+
+\newpage
+
+##### Distance traveled in SAM gender wise for all 4-groups combined
+
+```{r strain_TOT_Dist_SAM_gender_comb1, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis5 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = "", 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +2) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis5
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark5 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = "", 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +4) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark5
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig5 <- ggarrange(pl_dis5, pl_dis_lightdark5, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig5
+
+```
+
+__Figure 5 A - Total distance traveled (recorded over 5 experimental days) gender wise, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) gender wise__  
+
+__Statistics for Figure 5__
+
+```{r stats_fig_1_A_SAM_gender_comb1, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist5 <- pl_dis5$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data5 <- pl_dist5 #%>%
+   # filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data5$tot.dist ~ stat_data5$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 5A total distance (m)",
+           test = paste("between genders, all groups combined"),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d5 <- filter(pl_dis_lightdark5$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data5d <- data_d5 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data5d$avg_distance ~ stat_data5d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 5B average distance (m) during dark phase",
+           test = paste("between genders, all groups combined"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+# For the light phase
+data_l5 <- filter(pl_dis_lightdark5$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data5l <- data_l5 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data5l$avg_distance ~ stat_data5l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 5B average distance (m) during light phase",
+           test = paste("between genders, all groups combined"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled gender wise for all 4-groups combined
+
+```{r Dist_SAM_gender_comb1, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly6 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = gender, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - 4gr_controls") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly6
+
+### Data per phase
+pl_per_day_per_phase6 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase6
+
+### Data per day
+pl_per_day6 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day6
+
+pl_mean_per_day_as_line6 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+          #   shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line4
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig6 <- ggarrange(pl_hourly6, pl_per_day_per_phase6,pl_per_day6,pl_mean_per_day_as_line6, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig6
+
+```
+
+**Figure 6. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) gender wise.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 6**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_comb1, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig6_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         genotype == "WT") %>%
+  mutate(PI=factor(PI, levels = c(list_of_PIs)),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig6 = tibble()
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data6 <- fig6_data #%>%
+ #   dplyr::filter(PI == list_of_PIs[i])
+  
+  st_x = tibble(res_group = "all gr combined", effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data6), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig6 <- bind_rows(stat_fig6, st_x)
+#  }
+
+stat_fig6 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase. 
+
+\newpage
+
+##### Distance traveled in SAM gender wise for 3-groups combined
+\  
+
+`Group-1 is excluded from the analysis, so the 3-groups are`,  
+
+`group2 = "gr2"`,  
+`group3 = "gr3"`,  
+`group4 = "gr4"`.  
+
+```{r strain_TOT_Dist_SAM_gender_comb2, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+  
+### Total distance traveled
+pl_dis7 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = "", 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +2) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis7
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark7 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = "", 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +3) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark7
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig7 <- ggarrange(pl_dis7, pl_dis_lightdark7, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig7
+
+```
+
+__Figure 7 A - Total distance traveled (recorded over 5 experimental days) gender wise, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) gender wise__  
+
+__Statistics for Figure 7__
+
+```{r stats_fig_1_A_SAM_gender_comb2, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist7 <- pl_dis7$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2", "gr3", "gr4")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data7 <- pl_dist7 #%>%
+   # filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data7$tot.dist ~ stat_data7$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 7A total distance (m)",
+           test = paste("between genders, 3-groups combined"),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d7 <- filter(pl_dis_lightdark7$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2", "gr3", "gr4")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data7d <- data_d7 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data7d$avg_distance ~ stat_data7d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 7B average distance (m) during dark phase",
+           test = paste("between genders, 3-groups combined"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+# For the light phase
+data_l7 <- filter(pl_dis_lightdark7$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2", "gr3", "gr4")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data7l <- data_l7 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data7l$avg_distance ~ stat_data7l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 7B average distance (m) during light phase",
+           test = paste("between genders, 3-groups combined"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled gender wise for 3-groups combined
+
+```{r Dist_SAM_gender_comb2, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly8 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = gender, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - 3gr_controls") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly8
+
+### Data per phase
+pl_per_day_per_phase8 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase8
+
+### Data per day
+pl_per_day8 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day8
+
+pl_mean_per_day_as_line8 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+          #   shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line4
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig8 <- ggarrange(pl_hourly8, pl_per_day_per_phase8,pl_per_day8,pl_mean_per_day_as_line8, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig8
+
+```
+
+**Figure 8. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) gender wise.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 8**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_comb2, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig8_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2", "gr3", "gr4"),
+         genotype == "WT") %>%
+  mutate(PI=factor(PI, levels = c("gr2", "gr3", "gr4")),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig8 = tibble()
+
+#(Animal, genotype, PI, gender, phase, exp_day)
+#for (i in 1:length(list_of_PIs)) {
+  stat_data8 <- fig8_data #%>%
+ #   dplyr::filter(PI == list_of_PIs[i])
+  
+  st_x = tibble(res_group = "3-gr combined", effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data8), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig8 <- bind_rows(stat_fig8, st_x)
+#  }
+
+stat_fig8 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase.
+
+\newpage
+
+##### Distance traveled in SAM gender wise for group-2 
+\  
+
+`Group-2 is "group2"`.  
+`It is to serve as control for the mutants in the next sections`.  
+
+```{r strain_TOT_Dist_SAM_gender_gr2_control, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis9 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = "", 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +2) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis9
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark9 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = "", 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +2) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark9
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig9 <- ggarrange(pl_dis9, pl_dis_lightdark9, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig9
+
+```
+
+__Figure 9 A - Total distance traveled (recorded over 5 experimental days) gender wise, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) gender wise__  
+
+__Statistics for Figure 9__
+
+```{r stats_fig_1_A_SAM_gender_gr2_control, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist9 <- pl_dis9$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data9 <- pl_dist9 #%>%
+   # filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data9$tot.dist ~ stat_data9$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 9A total distance (m)",
+           test = paste("between genders, group-2 control"),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d9 <- filter(pl_dis_lightdark9$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data9d <- data_d9 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data9d$avg_distance ~ stat_data9d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 9B average distance (m) during dark phase",
+           test = paste("between genders, group-2 control"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+# For the light phase
+data_l9 <- filter(pl_dis_lightdark9$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data9l <- data_l9 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data9l$avg_distance ~ stat_data9l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 9B average distance (m) during light phase",
+           test = paste("between genders, group-2 control"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled gender wise for group-2
+
+```{r Dist_SAM_gender_gr2_control, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly10 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = gender, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - gr2_control") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly10
+
+### Data per phase
+pl_per_day_per_phase10 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase10
+
+### Data per day
+pl_per_day10 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day10
+
+pl_mean_per_day_as_line10 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+          #   shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line10
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig10 <- ggarrange(pl_hourly10, pl_per_day_per_phase10,pl_per_day10,pl_mean_per_day_as_line10, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig10
+
+```
+
+**Figure 10. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) gender wise.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 10**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_gr2_control, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig10_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "WT") %>%
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig10 = tibble()
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data10 <- fig10_data #%>%
+ #   dplyr::filter(PI == list_of_PIs[i])
+  
+  st_x = tibble(res_group = "gr2_control", effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data10), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig10 <- bind_rows(stat_fig10, st_x)
+#  }
+
+stat_fig10 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase.
+
+\newpage
+
+#### Mutant
+
+##### Distance traveled in SAM gender wise for group-2 mutant
+\  
+
+`Mutant for group-2`.  
+
+```{r strain_TOT_Dist_SAM_gender_gr2_mut, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis11 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = "gr2_mut", 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis11
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark11 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = "gr2_mut", 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = 0) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark11
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig11 <- ggarrange(pl_dis11, pl_dis_lightdark11, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig11
+
+```
+
+__Figure 11 A - Total distance traveled (recorded over 5 experimental days) gender wise, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) gender wise__  
+
+__Statistics for Figure 11__
+
+```{r stats_fig_1_A_SAM_gender_gr2_mut, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist11 <- pl_dis11$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data11 <- pl_dist11 #%>%
+   # filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data11$tot.dist ~ stat_data11$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 11A total distance (m)",
+           test = paste("between genders, group-2 mutant"),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d11 <- filter(pl_dis_lightdark11$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data11d <- data_d11 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data11d$avg_distance ~ stat_data11d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 11B average distance (m) during dark phase",
+           test = paste("between genders, group-2 mutant"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+# For the light phase
+data_l11 <- filter(pl_dis_lightdark11$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data11l <- data_l11 #%>%
+ #   filter(PI == list_of_PIs[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data11l$avg_distance ~ stat_data11l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 11B average distance (m) during light phase",
+           test = paste("between genders, group-2 mutant"), 
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+#}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled gender wise for group-2 mutant
+
+```{r Dist_SAM_gender_gr2_mut, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly12 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = gender, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - gr2_mutant") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly12
+
+### Data per phase
+pl_per_day_per_phase12 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender)) +
+  #create a rectangles shading dark and light phases
+  geom_rect(aes(xmin = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(factor(phase), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+  facet_grid(~exp_day) + 
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase12
+
+### Data per day
+pl_per_day12 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day12
+
+pl_mean_per_day_as_line12 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender, 
+          #   shape = PI,
+             group = PI)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line12
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig12 <- ggarrange(pl_hourly12, pl_per_day_per_phase12,pl_per_day12,pl_mean_per_day_as_line12, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=T, legend = "bottom")
+Fig12
+
+```
+
+**Figure 12. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) gender wise.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm) for Figure 12**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_gr2_mut, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig12_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2"),
+         genotype == "KO") %>%
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig12 = tibble()
+
+#for (i in 1:length(list_of_PIs)) {
+  stat_data12 <- fig12_data #%>%
+ #   dplyr::filter(PI == list_of_PIs[i])
+  
+  st_x = tibble(res_group = "gr2_mutant", effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data12), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig12 <- bind_rows(stat_fig12, st_x)
+#  }
+
+stat_fig12 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase.
+
+\newpage
+
+##### Distance traveled in SAM gender wise for group-2 control and mutant
+\  
+
+`Group-2 control and mutant`. 
+
+```{r strain_TOT_Dist_SAM_gender_gr2_control_mut, echo=FALSE, fig.width = 10, fig.height=4, fig.align="center"}
+
+### Total distance traveled
+pl_dis13 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+    filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>% 
+  #group by individual and calculate total_distance for each
+  group_by(Animal, genotype, PI, gender) %>%
+  summarise(tot.dist = sum(distance.m)) %>%
+  #create the plot environment/aesthetics
+  ggplot(aes(x = genotype, 
+             y = tot.dist, 
+             color = gender)) + 
+  #add a boxplot
+  geom_boxplot(outlier.shape = NULL) +             #don't display outliers
+  #add points shaped by cohort and not overlapping positions
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + #aes(shape = as.factor(genotype))
+  #add 'n='
+  stat_n_text() +
+  #axis label and title
+  labs(x = "", 
+       y = "total distance traveled [m]", 
+       title = "Total Distance - days (1-5)") + 
+  #add a theme
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3) +
+  #legend
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12))
+
+#pl_dis13
+
+### Mean distance traveled per phase 
+
+# phase refers to light/dark phases. Here, light phase is from 6:00am to 6:00pm and dark phase vice versa.
+
+#remove the first and last (incomplete) dark phases
+sam_data_4gr_phase <- sam_data_4gr %>%
+  filter(!(exp_day %in% c(1,5) & phase=="d"))
+  
+pl_dis_lightdark13 <- sam_data_4gr_phase %>%
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>% 
+  group_by(Animal, genotype, phase, PI, gender) %>%
+  summarise(avg_distance = mean(distance.m)) %>%
+  ggplot(aes(x = genotype, 
+             y = avg_distance, 
+             color = gender, 
+             )) +
+  geom_boxplot(outlier.shape = NULL) + 
+  geom_point(position = position_jitterdodge(), jitter.width = 0.2, shape=1, size = 2) + 
+  stat_n_text() +
+  labs(
+    x = "", 
+    y = "mean distance [m]", 
+    title = "Mean distance per phase - days (1-5)"
+  ) + 
+  #add a grid/columns by phase
+  facet_grid(.~phase) +
+  theme_pubr() +
+    #add text 'n='
+  stat_n_text() +
+  #count n of each gender and add it to the plot
+  geom_text(aes(label=..count.., y = ..count..), stat="count", position = position_dodge(width = 0.95), size=3, vjust = +1) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(vjust= 0, hjust = 0.5, size = 12)) #+
+  
+#pl_dis_lightdark13
+
+#arrange the 2 plots created above into a grid with 2 rows and 1 column with automatic labelling (A,B)
+Fig13 <- ggarrange(pl_dis13, pl_dis_lightdark13, labels="AUTO", ncol=2, nrow=1, common.legend=F, legend = "bottom")
+
+Fig13
+
+```
+
+__Figure 13 A - Total distance traveled (recorded over 5 experimental days) gender wise, and B - Mean distance traveled during light phase (6am-6pm) and dark phase (6pm-6am) (recorded over 5 experimental days, first and last (incomplete) dark phases excluded) gender wise__  
+
+__Statistics (Between genders) for Figure 13__
+
+```{r stats_fig_1_A_SAM_gender_gr2_control_mut_gn, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist13 <- pl_dis13$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genotypes_pigv)) {
+  stat_data13 <- pl_dist13 %>%
+    filter(genotype == list_of_genotypes_pigv[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data13$tot.dist ~ stat_data13$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13A total distance (m)",
+           test = paste("between genders for gr2", list_of_genotypes_pigv[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d13 <- filter(pl_dis_lightdark13$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genotypes_pigv)) {
+  stat_data13d <- data_d13 %>%
+    filter(genotype == list_of_genotypes_pigv[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data13d$avg_distance ~ stat_data13d$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13B average distance (m) during dark phase",
+           test = paste("between genders for gr2", list_of_genotypes_pigv[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+# For the light phase
+data_l13 <- filter(pl_dis_lightdark13$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genotypes_pigv)) {
+  stat_data13l <- data_l13 %>%
+    filter(genotype == list_of_genotypes_pigv[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data13l$avg_distance ~ stat_data13l$gender, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13B average distance (m) during light phase",
+           test = paste("between genders for gr2", list_of_genotypes_pigv[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+__Statistics (Between genotypes) for Figure 13__
+
+```{r stats_fig_1_A_SAM_gender_gr2_control_mut_ge, echo=F}
+
+#create a tibble to collect all stats
+stats = tibble()
+
+#Fig_5A (COMPARISON BETWEEN GENDERS)
+
+pl_dist13 <- pl_dis13$data %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data13 <- pl_dist13 %>%
+    filter(gender == list_of_genders[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data13$tot.dist ~ stat_data13$genotype, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13A total distance (m)",
+           test = paste("between genotypes for", list_of_genders[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#Fig_5B (COMPARISON BETWEEN GENDERS)
+# For the dark phase
+data_d13 <- filter(pl_dis_lightdark13$data, phase == "d") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data13d <- data_d13 %>%
+    filter(gender == list_of_genders[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+   st = tidy(wilcox.test(stat_data13d$avg_distance ~ stat_data13d$genotype, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13B average distance (m) during dark phase",
+           test = paste("between genotypes for", list_of_genders[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+# For the light phase
+data_l13 <- filter(pl_dis_lightdark13$data, phase == "l") %>%
+  #convert strain and cohort into factors 
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)),
+         genotype=factor(genotype, levels = c(list_of_genotypes_pigv)))
+
+for (i in 1:length(list_of_genders)) {
+  stat_data13l <- data_l13 %>%
+    filter(gender == list_of_genders[i])
+     # perform Wilcoxon Rank Sum Tests to compare between genders within group
+  st = tidy(wilcox.test(stat_data13l$avg_distance ~ stat_data13l$genotype, exact = FALSE)) %>%
+    mutate(method = "Wilcoxon Rank Sum",
+           info = "Fig 13B average distance (m) during light phase",
+           test = paste("between genotypes for", list_of_genders[i]),
+           sign=ifelse(p.value < 0.05, "*", "")) #%>%
+   #combine stats from every iteration of the loop
+  stats = bind_rows(stats, st)
+}
+
+#format the table
+stats%>%
+  #remove horizontal lines between rows
+  kable(booktabs = T) %>%
+  #prevent table from floating and scale it to page-width
+  kable_styling(latex_options = c("HOLD_position","scale_down"))
+
+```
+
+\newpage
+
+##### Time series of distance traveled gender wise for group-2 control and mutant
+
+```{r Dist_SAM_gender_gr2_control_mut, fig.width = 14, fig.height = 14, fig.align="center"}
+
+### HOURLY data 
+pl_hourly14 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  ggplot(aes(x = h_from_start, y = distance.m, linetype = genotype, color = gender)) + 
+  #create lines representing the mean in distance traveled for each group for each hour from start 
+  stat_summary(fun = mean, 
+               geom = "line", 
+               aes(color = gender)) + 
+  #add a ribbon to indicate standard deviation from the mean
+  stat_summary(fun = mean, 
+               fun.min = function(x) mean(x) - sd(x), 
+               fun.max = function(x) mean(x) + sd(x), 
+               geom = "ribbon", 
+               aes(fill = gender), 
+               color = NA, 
+               alpha = 0.15) + 
+  # Annotations
+  #create a sequence of rectangles spanning the indicated coordinates
+  annotate("rect", xmin = c(seq(0, 108, 24)), 
+           xmax = c(seq(0, 108, 24)+12), 
+           ymin = -100, ymax = 300, alpha = 0.10) + 
+  #create a sequence of text-labels with the specified content at the indicated x and y coordinates
+  annotate("text", x = seq(12, (120), 24), y = 0, label = paste("Day",1:length(seq(12, (120), 24))), size = 4) + 
+  #add a sequence of vertical lines at specified x-positions
+  geom_vline(xintercept = seq(0, 120, 24), linetype = "dashed") +
+  #add x-axis breaks/ticks and labels
+  scale_x_continuous(
+    breaks = seq(0, 120, 12), 
+    #enter here start time of dark and light phase
+    label = rep(c("18h", "6h"), 30)[1:length(seq(0, 120, 12))]
+  ) + 
+  # Labels etc
+  theme_classic() + 
+  theme(legend.title = element_blank())+
+  labs(x = "clock time", 
+       y = "mean distance traveled per hour [m]", 
+       title = "All days - gr2_control_&_mutant") + 
+    #define y-limits
+  coord_cartesian(ylim=c(-10, 225), expand=F)
+
+#pl_hourly14
+
+### Data per phase
+pl_per_day_per_phase14 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, phase, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+  ggplot(aes(x = interaction(factor(phase), genotype),
+ # ggplot(aes(x = interaction(genotype, factor(phase)),
+ # ggplot(aes(x = factor(phase),
+             y = distance, 
+             color = gender)) +
+  #create a rectangles shading dark and light phases
+    geom_rect(aes(xmin = as.integer(interaction(factor(phase), genotype), levels = levels(as.factor(phase)), ordered = TRUE) - 0.5,
+            xmax = as.integer(interaction(factor(phase), genotype), levels = levels(as.factor(phase)), ordered = TRUE) + 0.5,
+            ymin = -Inf,
+            ymax = Inf,
+            fill =  phase, group = phase), color = NA, alpha = 0.3) +  # "color = NA" to remove border
+ 
+  #custom gray and white color for dark and light phases
+  scale_fill_manual(values = c("gray90", "white")) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  #add a grid/columns by exp_day
+# facet_wrap(~genotype, strip.position = "bottom", scales = "free_x") +
+  facet_grid(~exp_day) +
+  scale_x_discrete(labels = c("d" = "dark", "l" = "light")) + 
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per phase [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day_per_phase14
+
+### Data per day
+pl_per_day14 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m)) %>%
+#  ggplot(aes(x = interaction(as.factor(exp_day), genotype),
+#  ggplot(aes(x = interaction(genotype, as.factor(exp_day)),
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance, 
+             color = gender)) +
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) +
+  theme_classic() + 
+  facet_wrap(~genotype, strip.position = "bottom", scales = "free_x") +
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") +
+#  theme(panel.spacing = unit(0, "lines"),
+#        strip.background = element_blank(),
+#        strip.placement = "outside",
+#        legend.position = "bottom",
+#        legend.title = element_blank())
+
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_per_day14
+
+pl_mean_per_day_as_line14 <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  #group by individual
+  group_by(Animal, genotype, PI, gender, exp_day) %>%
+  summarise(distance = mean(distance.m),
+            sd = sd(distance.m)) %>%
+  ggplot(aes(x = as.factor(exp_day),
+             y = distance,
+             color = interaction(as.factor(exp_day), genotype), 
+             group = genotype)) +
+  
+  geom_point() +
+  geom_errorbar(aes(ymin=distance, ymax=distance+sd), width=.1) +
+  #add a lines with aesthetics as defined in ggplot()
+  geom_line() +
+  
+  theme_classic() + 
+  labs(x = "", y = "mean distance traveled per day [m]", title = "5 complete days") + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+
+#pl_mean_per_day_as_line14
+
+#arrange the plots from this chunk and the 2 chunks above into a grid with 4 rows
+Fig14 <- ggarrange(pl_hourly14, pl_per_day_per_phase14,pl_per_day14,pl_mean_per_day_as_line14, labels="AUTO", ncol=1, nrow=4, 
+          common.legend=F, legend = "bottom")
+Fig14
+
+```
+
+**Figure 14. Time series of distance traveled per hour (A), per phase (B), per experimental day (C) and connected means per experimental day (D) gender wise.**  
+For all plots an experimental day starts at 06:00 and ends at 18:00.        
+Note A: Grey areas represent dark phases and white areas represent light phases.
+Note B, C & D: The days depicted here represent the experimental days as indicated in A. Day 1 starts at 06:00 and day 5 ends at 18:00. Data after Day 5 is excluded. B depicts the phases (dark, light), whereas C and D only depict whole days.
+Note D: means and SD per groups per day.  
+
+\newpage
+
+**Statistics (MCMCglmm; Between genders) for Figure 14**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_gr2_control_mut_gn, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig14_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig14 = tibble()
+
+for (i in 1:length(list_of_genotypes_pigv)) {
+  stat_data14 <- fig14_data %>%
+    dplyr::filter(genotype == list_of_genotypes_pigv[i])
+  
+  st_x = tibble(genotype_group = list_of_genotypes_pigv[i], effect = c("(Intercept)", "gendermale", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ gender + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data14), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig14 <- bind_rows(stat_fig14, st_x)
+  }
+
+stat_fig14 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase.
+
+**Statistics (MCMCglmm; Between genotypes) for Figure 14**  
+
+MCMCglmm was used to check the influence of the following variables on the distance traveled: gender, phase, hour from start (treated as fixed variables), and id (treated as a random variable).  
+
+```{r MCMCglmm_Hourly_Dist_SAM_gender_gr2_control_mut_ge, fig.width = 12, fig.height = 15, echo=F, warnings=F}
+
+prior <- list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002)))
+
+fig14_data <- sam_data_4gr %>%  
+  #enter the experimental days you want to display in the plot
+  filter(exp_day %in% c(1,2,3,4,5),
+         PI %in% c("gr2")) %>%
+  mutate(PI=factor(PI, levels = c("gr2")),
+         gender=factor(gender, levels = c(list_of_genders)))
+  
+stat_fig15 = tibble()
+
+for (i in 1:length(list_of_genders)) {
+  stat_data15 <- fig14_data %>%
+    dplyr::filter(gender == list_of_genders[i])
+  
+  st_x = tibble(gender = list_of_genders[i], effect = c("(Intercept)", "genotypeWT", "phasel", "h_from_start"))
+  
+mcmc <- MCMCglmm(distance.m ~ genotype + phase + h_from_start, 
+              random = ~ Animal, 
+              data = data.frame(stat_data15), 
+              family = "gaussian", 
+              prior = prior,
+              verbose = FALSE)
+
+summary(mcmc)
+
+    x <- summary(mcmc)$solutions
+    x <- data.frame(x) #%>%      mutate(tp = m)
+    
+    x$effect <- rownames(x)
+    rownames(x) <- NULL
+    
+    st_x <- full_join(st_x, x, by = "effect") %>%
+      mutate(sign = ifelse(pMCMC < 0.05, "*", ""))
+    
+    stat_fig15 <- bind_rows(stat_fig15, st_x)
+  }
+
+stat_fig15 %>%
+  #dplyr::select(-alternative) %>%
+  kable( longtable=TRUE) %>% #removed booktabs = T, otherwise "repeat_header" doesn't work
+  kable_styling(latex_options = c("HOLD_position","scale_down","repeat_header"))
+
+```
+
+The intercept is in this case the effect of "genderfemale/dark phase and hour from start". The other plots are deviations from genderfemale/dark phase.
+
+******
+
+### Conclusion
+
+******
+
+---
