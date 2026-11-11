@@ -1,9 +1,9 @@
-# Scientific Data Analysis in R
+# Biomedical Data Analysis in R
 
 ## Overview
-This repository documents selected scientific data-analysis workflows developed during a four-year part-time position as a Student Research Assistant at Charité Universitätsmedizin, Berlin.
+This repository documents selected biomedical data-analysis workflows developed during a four-year part-time position as a Student Research Assistant at Charité Universitätsmedizin, Berlin.
 
-The work involved analysing behavioural measurements from mouse and rat behavioural assays addressing neuroscience research questions across approximately 12 research projects. Different analyses were performed according to the requirements of each project, resulting in around 20 analysis workflows overall, of which approximately 14–15 were developed as new analysis templates.
+The work involved analysing behavioural measurements from mouse and rat behavioural assays addressing neuroscience research questions across approximately 12 research projects. Different analyses were performed according to the requirements of each project, resulting in around 30 analysis workflows overall, of which approximately 15 were developed as new analysis templates.
 
 Data were generated using multiple experimental paradigms and software systems, resulting in heterogeneous data structures and experiment-specific requirements for data extraction, preprocessing, wrangling and analysis.
 
@@ -46,12 +46,12 @@ The overall workflow can be summarised as:
 The workflows were designed to separate data preparation from downstream analysis where appropriate, while accommodating differences between experimental datasets.
 
 ## Data Processing
-The experimental data originated from approximately eight different software systems. Differences in data structure and output format required multiple approaches to data extraction, cleaning, restructuring and preprocessing.
+The experimental data originated from about eight different software systems. Differences in data structure and output format required multiple approaches to data extraction, cleaning, restructuring and preprocessing.
 
 The `data-processing/` directory contains selected preprocessing workflows developed for these different data sources.
 
 ## Analysis Workflows
-Around 20 different analysis workflows were used across the research projects, of which approximately 14–15 were developed as new analysis templates.
+Around 30 different analysis workflows were used across the research projects, of which approximately 15 were developed as new analysis templates.
 
 The `analysis-workflows/` directory contains the analysis templates I developed as part of this work. The templates address different behavioural assays and analytical requirements.
 
@@ -93,7 +93,7 @@ The analysis workflows included statistical methods appropriate to the experimen
 - Data visualisation
 
 ## My Contribution
-During this position, I developed and implemented R-based workflows for processing and analysing behavioural neuroscience data.
+During this position, I developed and implemented R-based workflows for processing and analysing behavioural and phenotypic data from neuroscience studies.
 
 My work included:
 
@@ -115,7 +115,7 @@ The workflows included in this repository represent analysis templates I develop
 - Statistical analysis
 - Data visualisation
 - Automated analysis and reporting
-- Scientific workflow development
+- Biomedical workflow development
 - Analysis of behavioural neuroscience data
 - Working with heterogeneous experimental datasets
 
@@ -127,7 +127,7 @@ The availability of the original code and associated research material is subjec
 ## Repository Structure
 
 ```text
-scientific-data-analysis-r/
+Biomedical-data-analysis-r/
 │
 ├── README.md
 │
