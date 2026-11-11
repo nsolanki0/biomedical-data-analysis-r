@@ -3,7 +3,7 @@
 ## Overview
 This repository documents selected biomedical data-analysis workflows developed during a four-year part-time position as a Student Research Assistant at Charité Universitätsmedizin, Berlin.
 
-The work involved analysing behavioural measurements from mouse and rat behavioural assays addressing neuroscience research questions across approximately 12 research projects. Different analyses were performed according to the requirements of each project, resulting in around 30 analysis workflows overall, of which approximately 15 were developed as new analysis templates.
+The work involved analysing behavioural measurements from mouse and rat behavioural assays addressing neuroscience research questions across approximately 12 research projects. Different analyses were performed according to the requirements of each project, resulting in aver 30 analysis workflows overall, of which approximately 15 were developed as new analysis templates.
 
 Data were generated using multiple experimental paradigms and software systems, resulting in heterogeneous data structures and experiment-specific requirements for data extraction, preprocessing, wrangling and analysis.
 
